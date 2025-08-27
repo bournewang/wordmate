@@ -53,6 +53,7 @@ export interface VocabularyData {
 
 // Unit progress interface
 export interface UnitProgress {
+  userId: string;
   unitId: number;
   completionRate: number;
   totalWords: number;
@@ -112,6 +113,7 @@ export interface PracticeQuestion {
 
 // Study settings interface  
 export interface StudySettings {
+  userId: string;
   practiceTypes: PracticeType[];
   questionsPerSession: number;
   timeLimit: number;

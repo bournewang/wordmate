@@ -2,10 +2,8 @@ import React, { useEffect, useState } from 'react';
 import styled from 'styled-components';
 import { 
   BarChart3, 
-  TrendingUp, 
   RefreshCw,
   Calendar,
-  Award,
   AlertCircle
 } from 'lucide-react';
 

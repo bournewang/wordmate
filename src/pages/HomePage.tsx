@@ -12,7 +12,8 @@ import {
 
 import { Card, Button, Container } from '../styles/theme';
 import { DatabaseService } from '../services/database';
-import type { VocabularyData } from '../types';
+import { ProgressService } from '../services/progressService';
+import type { VocabularyData, ProgressStats } from '../types';
 
 const Hero = styled.section`
   background: linear-gradient(135deg, ${({ theme }) => theme.colors.primary} 0%, ${({ theme }) => theme.colors.primaryDark} 100%);
@@ -152,12 +153,7 @@ const LoadingState = styled.div`
 
 const HomePage: React.FC = () => {
   const [vocabularyData, setVocabularyData] = useState<VocabularyData | null>(null);
-  const [stats, setStats] = useState({
-    totalWords: 0,
-    masteredWords: 0,
-    weakWords: [],
-    recentSessions: []
-  });
+  const [stats, setStats] = useState<ProgressStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -166,16 +162,16 @@ const HomePage: React.FC = () => {
 
   const loadData = async () => {
     try {
-      const [vocabData, userStats] = await Promise.all([
+      const [vocabData, progressStats] = await Promise.all([
         DatabaseService.getVocabularyData(),
-        DatabaseService.getUserStats('default-user') // 使用默认用户ID
+        ProgressService.calculateProgressStats('default-user')
       ]);
 
       if (vocabData) {
         setVocabularyData(vocabData);
       }
 
-      setStats(userStats);
+      setStats(progressStats);
     } catch (error) {
       console.error('加载数据失败:', error);
     } finally {
@@ -183,14 +179,11 @@ const HomePage: React.FC = () => {
     }
   };
 
-  if (loading) {
+  if (loading || !stats) {
     return <LoadingState>正在加载数据...</LoadingState>;
   }
 
-  const masteryRate = stats.totalWords > 0 
-    ? Math.round((stats.masteredWords / stats.totalWords) * 100) 
-    : 0;
-
+  const masteryRate = Math.round(stats.overall.masteryRate);
   const weakWordsCount = stats.weakWords.length;
 
   return (
@@ -210,7 +203,7 @@ const HomePage: React.FC = () => {
             <BookOpen />
           </StatIcon>
           <StatInfo>
-            <h3>{stats.totalWords}</h3>
+            <h3>{stats.overall.totalWords}</h3>
             <p>总词汇量</p>
           </StatInfo>
         </StatCard>
@@ -220,7 +213,7 @@ const HomePage: React.FC = () => {
             <Award />
           </StatIcon>
           <StatInfo>
-            <h3>{stats.masteredWords}</h3>
+            <h3>{stats.overall.masteredWords}</h3>
             <p>已掌握词汇</p>
           </StatInfo>
         </StatCard>
@@ -253,7 +246,7 @@ const HomePage: React.FC = () => {
             <BookOpen size={48} color="#3b82f6" style={{ margin: '0 auto 16px' }} />
             <h3>单元学习</h3>
             <p>按照教材单元系统学习词汇，每个单元包含精选的重点词汇</p>
-            <Button as={Link} to="/units" fullWidth>
+            <Button as={Link} to="/units" $fullWidth>
               开始学习
             </Button>
           </ActionCard>
@@ -262,7 +255,7 @@ const HomePage: React.FC = () => {
             <BarChart3 size={48} color="#10b981" style={{ margin: '0 auto 16px' }} />
             <h3>学习进度</h3>
             <p>查看详细的学习统计，了解你的进步情况和薄弱环节</p>
-            <Button as={Link} to="/progress" variant="outline" fullWidth>
+            <Button as={Link} to="/progress" variant="outline" $fullWidth>
               查看进度
             </Button>
           </ActionCard>

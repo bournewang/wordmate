@@ -11,15 +11,15 @@ import type {
 
 export class WordMateDB extends Dexie {
   // 词汇数据表
-  vocabularyData: Dexie.Table<VocabularyData, number>;
-  words: Dexie.Table<Word, string>;
+  vocabularyData!: Dexie.Table<VocabularyData, number>;
+  words!: Dexie.Table<Word, string>;
   
   // 用户相关表
-  users: Dexie.Table<User, string>;
-  userProgress: Dexie.Table<UserProgress, string>;
-  unitProgress: Dexie.Table<UnitProgress, string>;
-  practiceSessions: Dexie.Table<PracticeSession, string>;
-  studySettings: Dexie.Table<StudySettings, string>;
+  users!: Dexie.Table<User, string>;
+  userProgress!: Dexie.Table<UserProgress, string>;
+  unitProgress!: Dexie.Table<UnitProgress, string>;
+  practiceSessions!: Dexie.Table<PracticeSession, string>;
+  studySettings!: Dexie.Table<StudySettings, string>;
 
   constructor() {
     super('WordMateDB');
@@ -35,12 +35,12 @@ export class WordMateDB extends Dexie {
     });
 
     // 添加钩子来自动处理日期字符串
-    this.words.hook('creating', (primaryKey, obj) => {
+    this.words.hook('creating', (_primaryKey, obj) => {
       if (!obj.lastReviewed) obj.lastReviewed = null;
       if (!obj.nextReview) obj.nextReview = null;
     });
 
-    this.practiceSessions.hook('creating', (primaryKey, obj) => {
+    this.practiceSessions.hook('creating', (_primaryKey, obj) => {
       obj.startTime = obj.startTime || new Date().toISOString();
     });
   }
@@ -54,7 +54,9 @@ export class DatabaseService {
     try {
       // 检查是否已经存在数据
       const existingData = await db.vocabularyData.toArray();
-      if (existingData.length === 0) {
+      const existingWords = await db.words.count();
+      
+      if (existingData.length === 0 && existingWords === 0) {
         // 插入词汇数据
         await db.vocabularyData.add(vocabularyData);
         
@@ -64,11 +66,25 @@ export class DatabaseService {
           allWords.push(...unit.words);
         });
         
-        await db.words.bulkAdd(allWords);
+        // 使用 bulkPut 而不是 bulkAdd 来避免重复键错误
+        await db.words.bulkPut(allWords);
         console.log('词汇数据初始化完成');
+      } else {
+        console.log('词汇数据已存在，跳过初始化');
       }
     } catch (error) {
       console.error('初始化词汇数据失败:', error);
+      // 如果是重复键错误，尝试清除数据后重新初始化
+      if ((error as any).name === 'ConstraintError' && (error as any).message?.includes('Key already exists')) {
+        console.log('检测到重复键错误，清除现有数据后重新初始化');
+        try {
+          await this.clearAndReinitializeVocabulary();
+          return;
+        } catch (retryError) {
+          console.error('重新初始化失败:', retryError);
+          throw retryError;
+        }
+      }
       throw error;
     }
   }
@@ -119,8 +135,23 @@ export class DatabaseService {
       await db.words.clear();
       console.log('清除现有词汇数据');
       
-      // Reinitialize with transformation
-      await this.initializeVocabulary();
+      // Fetch and initialize data directly without calling initializeVocabulary to avoid recursion
+      const response = await fetch('/grade6_B_enhanced.json');
+      if (!response.ok) {
+        throw new Error('无法加载词汇数据');
+      }
+      const vocabularyData = await response.json() as VocabularyData;
+      
+      // Insert vocabulary data
+      await db.vocabularyData.add(vocabularyData);
+      
+      // Insert all words
+      const allWords: Word[] = [];
+      vocabularyData.units.forEach(unit => {
+        allWords.push(...unit.words);
+      });
+      
+      await db.words.bulkPut(allWords);
       console.log('重新初始化词汇数据完成');
     } catch (error) {
       console.error('重新初始化词汇失败:', error);
@@ -144,16 +175,18 @@ export class DatabaseService {
     try {
       const now = new Date().toISOString();
       
-      // Get words that are due for review (nextReview <= now)
+      // Get words that are due for review (nextReview <= now) and not mastered (masteryLevel <= 4)
       const dueWords = await db.words
         .where('nextReview')
         .belowOrEqual(now)
+        .and(word => word.masteryLevel <= 4)
         .toArray();
       
-      // Get words that have never been reviewed (nextReview is null)
+      // Get words that have never been reviewed (nextReview is null) and not mastered
       const newWords = await db.words
         .where('nextReview')
-        .equals(null)
+        .equals(null as unknown as string)
+        .and(word => word.masteryLevel <= 4)
         .toArray();
       
       // Combine both arrays and limit the results
@@ -169,7 +202,7 @@ export class DatabaseService {
     try {
       await db.users.put(user);
       await db.userProgress.put(user.progress);
-      await db.studySettings.put({ userId: user.id, ...user.settings });
+      await db.studySettings.put({ ...user.settings, userId: user.id });
     } catch (error) {
       console.error('保存用户数据失败:', error);
       throw error;
@@ -187,7 +220,7 @@ export class DatabaseService {
       return {
         ...user,
         progress: progress || this.getDefaultUserProgress(userId),
-        settings: settings || this.getDefaultStudySettings()
+        settings: settings || this.getDefaultStudySettings(userId)
       };
     } catch (error) {
       console.error('获取用户数据失败:', error);
@@ -290,9 +323,10 @@ export class DatabaseService {
     };
   }
 
-  private static getDefaultStudySettings(): StudySettings {
+  private static getDefaultStudySettings(userId: string = 'default-user'): StudySettings {
     return {
-      practiceTypes: ['flashcard', 'typing', 'multiple-choice'],
+      userId,
+      practiceTypes: ['flashcard', 'typing', 'multipleChoice'],
       questionsPerSession: 20,
       timeLimit: 30,
       soundEnabled: true,

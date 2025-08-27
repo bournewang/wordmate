@@ -4,7 +4,6 @@ import {
   Flame, 
   TrendingDown, 
   Calendar,
-  Clock,
   Target
 } from 'lucide-react';
 import { Card } from '../../styles/theme';
@@ -309,7 +308,7 @@ const StreakAndWeakWords: React.FC<StreakAndWeakWordsProps> = ({ streakData, wea
         </WeekLabels>
 
         <StreakCalendar>
-          {streakData.streakHistory.map((day, index) => (
+          {streakData.streakHistory.map((day) => (
             <DayCell
               key={day.date}
               $active={day.active}
@@ -335,7 +334,7 @@ const StreakAndWeakWords: React.FC<StreakAndWeakWordsProps> = ({ streakData, wea
           </EmptyState>
         ) : (
           <WeakWordsList>
-            {weakWords.map((item, index) => (
+            {weakWords.map((item) => (
               <WeakWordItem key={item.word.id}>
                 <WordInfo>
                   <h4>{item.word.word}</h4>

@@ -10,7 +10,8 @@ import {
 
 import { Card, Button, Container } from '../styles/theme';
 import { DatabaseService } from '../services/database';
-import type { VocabularyData, UnitProgress } from '../types';
+import { ProgressService } from '../services/progressService';
+import type { VocabularyData, ProgressStats } from '../types';
 
 const PageHeader = styled.div`
   text-align: center;
@@ -154,7 +155,7 @@ const LoadingState = styled.div`
 
 const UnitsPage: React.FC = () => {
   const [vocabularyData, setVocabularyData] = useState<VocabularyData | null>(null);
-  const [unitsProgress, setUnitsProgress] = useState<Map<number, UnitProgress>>(new Map());
+  const [progressStats, setProgressStats] = useState<ProgressStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -163,38 +164,16 @@ const UnitsPage: React.FC = () => {
 
   const loadData = async () => {
     try {
-      const vocabData = await DatabaseService.getVocabularyData();
+      const [vocabData, stats] = await Promise.all([
+        DatabaseService.getVocabularyData(),
+        ProgressService.calculateProgressStats('default-user')
+      ]);
+      
       if (vocabData) {
         setVocabularyData(vocabData);
-        
-        // 获取每个单元的进度（这里简化处理，实际应该从数据库获取）
-        const progressMap = new Map<number, UnitProgress>();
-        
-        for (const unit of vocabData.units) {
-          // 从数据库获取真实的进度数据
-          const unitWords = await DatabaseService.getWordsByUnit(unit.id.toString());
-          const masteredWords = unitWords.filter(w => w.masteryLevel >= 4).length;
-          const avgMasteryLevel = unitWords.length > 0 
-            ? unitWords.reduce((sum, w) => sum + w.masteryLevel, 0) / unitWords.length 
-            : 0;
-          const completionRate = unitWords.length > 0 
-            ? (masteredWords / unitWords.length) * 100 
-            : 0;
-            
-          const progress: UnitProgress = {
-            unitId: unit.id,
-            completionRate,
-            totalWords: unit.words.length,
-            masteredWords,
-            avgMasteryLevel,
-            lastStudied: new Date().toISOString()
-          };
-          
-          progressMap.set(unit.id, progress);
-        }
-        
-        setUnitsProgress(progressMap);
       }
+      
+      setProgressStats(stats);
     } catch (error) {
       console.error('加载单元数据失败:', error);
     } finally {
@@ -226,10 +205,11 @@ const UnitsPage: React.FC = () => {
 
       <UnitsGrid>
         {vocabularyData.units.map((unit) => {
-          const progress = unitsProgress.get(unit.id);
-          const completionRate = progress?.completionRate || 0;
+          // Find unit progress from ProgressStats
+          const unitProgress = progressStats?.unitProgress.find(p => p.unitId === unit.id);
+          const completionRate = unitProgress?.completionRate || 0;
           const isCompleted = completionRate >= 90;
-          const masteredWords = progress?.masteredWords || 0;
+          const masteredWords = unitProgress?.masteredWords || 0;
 
           return (
             <UnitCard key={unit.id}>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Volume2, Check, X, Eye, EyeOff } from 'lucide-react';
+import { Volume2, Eye, EyeOff } from 'lucide-react';
 import type { Word } from '../../types';
 import { AudioService } from '../../services/audioService';
 
@@ -421,7 +421,7 @@ export const TypingMode: React.FC<TypingModeProps> = ({
     
     // Small delay to ensure the component is ready
     setTimeout(playAudio, 300);
-  }, [word.id, onPlayAudio]);
+  }, [word, onPlayAudio]);
 
   const handlePlayAudio = async () => {
     if (isAudioPlaying) return;
@@ -445,7 +445,6 @@ export const TypingMode: React.FC<TypingModeProps> = ({
   const handleSubmit = () => {
     if (hasAnswered || !userInput.trim()) return;
     
-    const isCorrect = userInput.toLowerCase().trim() === word.word.toLowerCase();
     setHasAnswered(true);
     setShowFeedback(true);
     onAnswer(userInput.trim()); // Pass the actual user input

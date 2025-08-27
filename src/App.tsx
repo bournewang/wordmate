@@ -10,6 +10,13 @@ import PracticePage from './pages/PracticePage';
 import ProgressPage from './pages/ProgressPage';
 import SettingsPage from './pages/SettingsPage';
 
+// 认证和同步组件
+import { AuthProvider, useAuth, useRequireAuth } from './hooks/useAuth';
+import { SyncProvider } from './hooks/useSync';
+import { LoginPage } from './components/auth/LoginPage';
+import { LoadingSpinner } from './components/ui/LoadingSpinner';
+import { initializeSync } from './utils/simpleSync';
+
 // 服务
 import { DatabaseService } from './services/database';
 import { VocabularyData } from './types/vocabulary';
@@ -28,13 +35,32 @@ const queryClient = new QueryClient({
   },
 });
 
-function App() {
+// 主应用内容组件（认证后显示）
+function MainApp() {
   const [isInitialized, setIsInitialized] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { isAuthenticated } = useAuth();
+  const [syncInitialized, setSyncInitialized] = useState(false);
 
   useEffect(() => {
     initializeApp();
   }, []);
+
+  useEffect(() => {
+    // 当用户认证后初始化同步
+    if (isAuthenticated && isInitialized && !syncInitialized) {
+      initializeSync()
+        .then(() => {
+          console.log('✅ 同步系统初始化完成');
+          setSyncInitialized(true);
+        })
+        .catch((error) => {
+          console.warn('⚠️ 同步系统初始化失败:', error);
+          // 同步失败不影响主应用使用
+          setSyncInitialized(true);
+        });
+    }
+  }, [isAuthenticated, isInitialized, syncInitialized]);
 
   const initializeApp = async () => {
     try {
@@ -93,20 +119,75 @@ function App() {
   }
 
   return (
+    <Router>
+      <Layout>
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/units" element={<UnitsPage />} />
+          <Route path="/practice/:unitId" element={<PracticePage />} />
+          <Route path="/progress" element={<ProgressPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+        </Routes>
+      </Layout>
+    </Router>
+  );
+}
+
+// 认证守卫组件
+function AuthGate() {
+  const { isAuthenticated, needsAuth, isLoading } = useRequireAuth();
+  const [appLoading, setAppLoading] = useState(false);
+
+  // 显示加载状态
+  if (isLoading || appLoading) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        color: 'white',
+        fontFamily: 'system-ui, -apple-system, sans-serif'
+      }}>
+        <LoadingSpinner size="large" color="white" />
+        <h2 style={{ margin: '1rem 0 0.5rem 0', fontSize: '2rem' }}>WordMate</h2>
+        <p style={{ margin: 0, opacity: 0.9 }}>
+          {isAuthenticated ? '正在加载您的学习数据...' : '正在初始化...'}
+        </p>
+      </div>
+    );
+  }
+
+  // 显示登录页面
+  if (needsAuth) {
+    return (
+      <LoginPage 
+        onLogin={() => {
+          setAppLoading(true);
+          // 登录成功后会触发useEffect重新渲染
+          setTimeout(() => setAppLoading(false), 1000);
+        }} 
+      />
+    );
+  }
+
+  // 显示主应用
+  return <MainApp />;
+}
+
+// 主应用入口
+function App() {
+  return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={theme}>
         <GlobalStyle />
-        <Router>
-          <Layout>
-            <Routes>
-              <Route path="/" element={<HomePage />} />
-              <Route path="/units" element={<UnitsPage />} />
-              <Route path="/practice/:unitId" element={<PracticePage />} />
-              <Route path="/progress" element={<ProgressPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
-            </Routes>
-          </Layout>
-        </Router>
+        <AuthProvider>
+          <SyncProvider>
+            <AuthGate />
+          </SyncProvider>
+        </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

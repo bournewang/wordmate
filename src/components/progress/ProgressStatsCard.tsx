@@ -2,11 +2,8 @@ import React from 'react';
 import styled from 'styled-components';
 import { 
   BookOpen, 
-  Award, 
   TrendingUp, 
-  Clock,
-  Target,
-  Brain
+  Star
 } from 'lucide-react';
 import { Card } from '../../styles/theme';
 import type { ProgressStats } from '../../services/progressService';
@@ -128,118 +125,163 @@ const StatInfo = styled.div`
   }
 `;
 
-const ProgressBar = styled.div`
-  margin-top: ${({ theme }) => theme.spacing.sm};
-  width: 100%;
-  height: 6px;
-  background: ${({ theme }) => theme.colors.gray200};
-  border-radius: ${({ theme }) => theme.borderRadius.full};
-  overflow: hidden;
-
-  @media (max-width: ${({ theme }) => theme.breakpoints.sm}) {
-    height: 4px;
-  }
-`;
-
-const ProgressFill = styled.div<{ $percentage: number; $color: string }>`
-  height: 100%;
-  width: ${({ $percentage }) => $percentage}%;
-  background: ${({ $color }) => $color};
-  transition: width ${({ theme }) => theme.transitions.normal};
-  border-radius: ${({ theme }) => theme.borderRadius.full};
-`;
 
 interface ProgressStatsCardProps {
   stats: ProgressStats['overall'];
 }
 
 const ProgressStatsCard: React.FC<ProgressStatsCardProps> = ({ stats }) => {
-  const formatMasteryLevel = (level: number): string => {
-    return level.toFixed(1);
-  };
-
-  const getMasteryLevelColor = (level: number): string => {
-    if (level >= 4) return '#10b981'; // Green for mastered
-    if (level >= 2) return '#f59e0b'; // Orange for learning
-    return '#ef4444'; // Red for new/difficult
-  };
-
-  const masteryLevelColor = getMasteryLevelColor(stats.averageMasteryLevel);
 
   return (
-    <StatsGrid>
-      <StatCard>
-        <StatIcon $color="#3b82f6">
-          <BookOpen />
-        </StatIcon>
-        <StatInfo>
-          <h3>{stats.totalWords.toLocaleString()}</h3>
-          <p>总词汇量</p>
-        </StatInfo>
-      </StatCard>
+    <>
+      {/* Level-based Progress Cards */}
+      {/* <StatsGrid>
+        <StatCard>
+          <StatIcon $color="#ef4444">
+            <Clock />
+          </StatIcon>
+          <StatInfo>
+            <h3>{stats.newWords.toLocaleString()}</h3>
+            <p>🔴 新词汇 (Level 0)</p>
+          </StatInfo>
+        </StatCard>
 
-      <StatCard>
-        <StatIcon $color="#10b981">
-          <Award />
-        </StatIcon>
-        <StatInfo>
-          <h3>{stats.masteredWords.toLocaleString()}</h3>
-          <p>已掌握词汇</p>
-          <ProgressBar>
-            <ProgressFill 
-              $percentage={stats.masteryRate} 
-              $color="#10b981"
-            />
-          </ProgressBar>
-        </StatInfo>
-      </StatCard>
+        <StatCard>
+          <StatIcon $color="#f97316">
+            <Zap />
+          </StatIcon>
+          <StatInfo>
+            <h3>{stats.attemptedWords.toLocaleString()}</h3>
+            <p>🟠 已尝试 (Level 1)</p>
+          </StatInfo>
+        </StatCard>
 
-      <StatCard>
-        <StatIcon $color="#f59e0b">
-          <TrendingUp />
-        </StatIcon>
-        <StatInfo>
-          <h3>{stats.masteryRate.toFixed(1)}%</h3>
-          <p>掌握率</p>
-        </StatInfo>
-      </StatCard>
+        <StatCard>
+          <StatIcon $color="#f59e0b">
+            <Brain />
+          </StatIcon>
+          <StatInfo>
+            <h3>{stats.learningWords.toLocaleString()}</h3>
+            <p>🟡 学习中 (Level 2)</p>
+          </StatInfo>
+        </StatCard>
 
-      <StatCard>
-        <StatIcon $color="#ef4444">
-          <Target />
-        </StatIcon>
-        <StatInfo>
-          <h3>{stats.learningWords.toLocaleString()}</h3>
-          <p>学习中的词汇</p>
-        </StatInfo>
-      </StatCard>
+        <StatCard>
+          <StatIcon $color="#84cc16">
+            <Users />
+          </StatIcon>
+          <StatInfo>
+            <h3>{stats.familiarWords.toLocaleString()}</h3>
+            <p>🟢 熟悉 (Level 3)</p>
+          </StatInfo>
+        </StatCard>
 
-      <StatCard>
-        <StatIcon $color="#8b5cf6">
-          <Brain />
-        </StatIcon>
-        <StatInfo>
-          <h3>{formatMasteryLevel(stats.averageMasteryLevel)}</h3>
-          <p>平均掌握程度</p>
-          <ProgressBar>
-            <ProgressFill 
-              $percentage={(stats.averageMasteryLevel / 5) * 100} 
-              $color={masteryLevelColor}
-            />
-          </ProgressBar>
-        </StatInfo>
-      </StatCard>
+        <StatCard>
+          <StatIcon $color="#10b981">
+            <Award />
+          </StatIcon>
+          <StatInfo>
+            <h3>{stats.masteredWords.toLocaleString()}</h3>
+            <p>🔵 掌握 (Level 4)</p>
+            <ProgressBar>
+              <ProgressFill 
+                $percentage={stats.masteryRate} 
+                $color="#10b981"
+              />
+            </ProgressBar>
+          </StatInfo>
+        </StatCard>
 
-      <StatCard>
-        <StatIcon $color="#64748b">
-          <Clock />
-        </StatIcon>
-        <StatInfo>
-          <h3>{stats.newWords.toLocaleString()}</h3>
-          <p>新词汇</p>
-        </StatInfo>
-      </StatCard>
-    </StatsGrid>
+        <StatCard>
+          <StatIcon $color="#8b5cf6">
+            <Sparkles />
+          </StatIcon>
+          <StatInfo>
+            <h3>{stats.expertWords.toLocaleString()}</h3>
+            <p>🟣 专家 (Level 5)</p>
+          </StatInfo>
+        </StatCard>
+      </StatsGrid> */}
+
+      {/* Recent Progress Cards */}
+      <StatsGrid>
+        <StatCard>
+          <StatIcon $color="#3b82f6">
+            <BookOpen />
+          </StatIcon>
+          <StatInfo>
+            <h3>{stats.totalWords.toLocaleString()}</h3>
+            <p>总词汇量</p>
+          </StatInfo>
+        </StatCard>
+
+        <StatCard>
+          <StatIcon $color="#06b6d4">
+            <Star />
+          </StatIcon>
+          <StatInfo>
+            <h3>{stats.wordsAttemptedToday.toLocaleString()}</h3>
+            <p>今日练习词汇</p>
+          </StatInfo>
+        </StatCard>
+
+        <StatCard>
+          <StatIcon $color="#8b5cf6">
+            <TrendingUp />
+          </StatIcon>
+          <StatInfo>
+            <h3>{stats.wordsImprovedThisWeek.toLocaleString()}</h3>
+            <p>本周进步词汇</p>
+          </StatInfo>
+        </StatCard>
+
+        {/* <StatCard>
+          <StatIcon $color={getTrendColor()}>
+            {getTrendIcon()}
+          </StatIcon>
+          <StatInfo>
+            <h3>{stats.currentAccuracy.toFixed(1)}%</h3>
+            <p>当前准确率 
+              {stats.improvementTrend === 'improving' && ' 📈'}
+              {stats.improvementTrend === 'declining' && ' 📉'}
+              {stats.improvementTrend === 'stable' && ' ➡️'}
+            </p>
+          </StatInfo>
+        </StatCard> */}
+
+        {/* <StatCard>
+          <StatIcon $color={masteryLevelColor}>
+            <Brain />
+          </StatIcon>
+          <StatInfo>
+            <h3>{formatMasteryLevel(stats.averageMasteryLevel)}</h3>
+            <p>平均掌握水平</p>
+            <ProgressBar>
+              <ProgressFill 
+                $percentage={(stats.averageMasteryLevel / 5) * 100} 
+                $color={masteryLevelColor}
+              />
+            </ProgressBar>
+          </StatInfo>
+        </StatCard> */}
+
+        {/* <StatCard>
+          <StatIcon $color="#10b981">
+            <Award />
+          </StatIcon>
+          <StatInfo>
+            <h3>{stats.masteryRate.toFixed(1)}%</h3>
+            <p>整体掌握率</p>
+            <ProgressBar>
+              <ProgressFill 
+                $percentage={stats.masteryRate} 
+                $color="#10b981"
+              />
+            </ProgressBar>
+          </StatInfo>
+        </StatCard> */}
+      </StatsGrid>
+    </>
   );
 };
 

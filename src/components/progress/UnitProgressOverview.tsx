@@ -5,8 +5,6 @@ import {
   Award, 
   ChevronDown, 
   ChevronUp,
-  TrendingUp,
-  Users,
   Target,
   BarChart
 } from 'lucide-react';

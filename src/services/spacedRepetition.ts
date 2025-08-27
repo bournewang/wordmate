@@ -99,13 +99,13 @@ export class SpacedRepetitionService {
 
     // 基于答题质量调整
     if (quality >= 4) {
-      masteryLevel += 0.3;
+      masteryLevel += 0.7;
     } else if (quality === 3) {
-      masteryLevel += 0.1;
+      masteryLevel += 0.4;
     } else if (quality === 2) {
-      masteryLevel -= 0.1;
+      masteryLevel -= 0.4;
     } else {
-      masteryLevel -= 0.5;
+      masteryLevel -= 0.9;
     }
 
     // 基于响应时间调整 (响应越快，掌握越好)
@@ -161,6 +161,9 @@ export class SpacedRepetitionService {
     const now = new Date();
     
     const reviewWords = words.filter(word => {
+      // 过滤掉已经完全掌握的单词 (masteryLevel > 4)
+      if (word.masteryLevel > 4) return false;
+      
       if (!word.nextReview) return true; // 从未学习过的单词
       
       const nextReviewDate = new Date(word.nextReview);

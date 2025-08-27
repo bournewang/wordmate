@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
-import { Play, Book, Target, Settings, ArrowRight } from 'lucide-react';
+import { Book, Target, Settings } from 'lucide-react';
 import type { Word, PracticeType } from '../types';
 import { DatabaseService } from '../services/database';
 import { SpacedRepetitionService } from '../services/spacedRepetition';
@@ -248,50 +248,129 @@ const StatLabel = styled.div`
   }
 `;
 
+const MasterySection = styled.div`
+  max-width: 800px;
+  margin: 0 auto 3rem;
+  text-align: center;
+  
+  @media (max-width: ${props => props.theme.breakpoints.md}) {
+    margin: 0 auto 2rem;
+  }
+  
+  @media (max-width: ${props => props.theme.breakpoints.sm}) {
+    margin: 0 auto 1.5rem;
+  }
+`;
+
+const MasteryTitle = styled.h2`
+  color: ${props => props.theme.colors.text};
+  font-size: 1.5rem;
+  margin: 0 0 1rem;
+  
+  @media (max-width: ${props => props.theme.breakpoints.md}) {
+    font-size: 1.25rem;
+    margin: 0 0 0.75rem;
+  }
+  
+  @media (max-width: ${props => props.theme.breakpoints.sm}) {
+    font-size: 1.125rem;
+    margin: 0 0 0.5rem;
+  }
+`;
+
+const MasteryOverview = styled.div`
+  background: ${props => props.theme.colors.background};
+  border: 2px solid ${props => props.theme.colors.border};
+  border-radius: 16px;
+  padding: 2rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 2rem;
+  
+  @media (max-width: ${props => props.theme.breakpoints.md}) {
+    padding: 1.5rem;
+    gap: 1.5rem;
+    border-radius: 12px;
+  }
+  
+  @media (max-width: ${props => props.theme.breakpoints.sm}) {
+    padding: 1rem;
+    gap: 1rem;
+    border-radius: 8px;
+    flex-direction: column;
+  }
+`;
+
+const MasteryGroup = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  
+  @media (max-width: ${props => props.theme.breakpoints.sm}) {
+    flex-direction: row;
+    gap: 1rem;
+  }
+`;
+
+const MasteryDot = styled.div<{ $level: 'new' | 'learning' | 'mastered'; $count: number }>`
+  width: ${props => Math.max(20, Math.min(50, props.$count * 3))}px;
+  height: ${props => Math.max(20, Math.min(50, props.$count * 3))}px;
+  border-radius: 50%;
+  background-color: ${
+    props => props.$level === 'new' ? '#ef4444' :
+             props.$level === 'learning' ? '#f59e0b' : '#10b981'
+  };
+  opacity: ${props => props.$count > 0 ? 1 : 0.3};
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: bold;
+  font-size: ${props => Math.max(10, Math.min(16, props.$count * 0.8 + 8))}px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  
+  @media (max-width: ${props => props.theme.breakpoints.sm}) {
+    width: ${props => Math.max(18, Math.min(40, props.$count * 2.5))}px;
+    height: ${props => Math.max(18, Math.min(40, props.$count * 2.5))}px;
+    font-size: ${props => Math.max(8, Math.min(14, props.$count * 0.6 + 6))}px;
+  }
+`;
+
+const MasteryLabel = styled.div`
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: ${props => props.theme.colors.text};
+  
+  @media (max-width: ${props => props.theme.breakpoints.md}) {
+    font-size: 0.85rem;
+  }
+  
+  @media (max-width: ${props => props.theme.breakpoints.sm}) {
+    font-size: 0.8rem;
+  }
+`;
+
+const MasteryCount = styled.div`
+  font-size: 0.8rem;
+  color: ${props => props.theme.colors.textSecondary};
+  
+  @media (max-width: ${props => props.theme.breakpoints.md}) {
+    font-size: 0.75rem;
+  }
+  
+  @media (max-width: ${props => props.theme.breakpoints.sm}) {
+    font-size: 0.7rem;
+  }
+`;
+
+
 const QuickStartSection = styled.div`
   max-width: 600px;
   margin: 0 auto;
   text-align: center;
-`;
-
-const SectionTitle = styled.h2`
-  color: ${props => props.theme.colors.text};
-  margin: 0 0 1.5rem;
-`;
-
-const QuickStartCard = styled(motion.div)`
-  background: ${props => props.theme.colors.secondary};
-  border: 2px solid ${props => props.theme.colors.border};
-  border-radius: 12px;
-  padding: 2rem;
-  margin-bottom: 1rem;
-`;
-
-const StartButton = styled(motion.button)`
-  background: ${props => props.theme.colors.primary};
-  color: white;
-  border: none;
-  border-radius: 12px;
-  padding: 1rem 2rem;
-  font-size: 1.1rem;
-  font-weight: 600;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin: 1rem auto 0;
-  
-  &:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  }
-  
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
-  }
 `;
 
 const LoadingMessage = styled.div`
@@ -344,8 +423,41 @@ const PracticePage: React.FC = () => {
   const [selectedMode, setSelectedMode] = useState<PracticeType | null>(null);
   const [practiceWords, setPracticeWords] = useState<Word[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [recommendations, setRecommendations] = useState<any>(null);
+  const [recommendations, setRecommendations] = useState<{
+    reviewWords: number;
+    newWords: number;
+    dailyGoal: number;
+  } | null>(null);
   const [showPracticeSession, setShowPracticeSession] = useState(false);
+  const [masteryDistribution, setMasteryDistribution] = useState<{
+    new: number;
+    learning: number;
+    mastered: number;
+  }>({ new: 0, learning: 0, mastered: 0 });
+  const [totalWordsInUnit, setTotalWordsInUnit] = useState(0);
+
+  // Calculate mastery distribution from practice words
+  const calculateMasteryDistribution = (words: Word[]) => {
+    const distribution = {
+      new: 0,        // Levels 0-1 - 练习中
+      learning: 0,   // Levels 2-3 - 巩固中
+      mastered: 0    // Levels 4-5 - 已掌握
+    };
+    
+    words.forEach(word => {
+      const level = (word.masteryLevel);
+      if (level <= 1) {
+        distribution.new++;
+      } else if (level <= 3) {
+        distribution.learning++;
+      } else {
+        distribution.mastered++;
+        console.log("mastered", word.word);
+      }
+    });
+    
+    return distribution;
+  };
 
   // Load initial data and recommendations
   useEffect(() => {
@@ -373,9 +485,21 @@ const PracticePage: React.FC = () => {
           
           // Use DatabaseService method for consistency
           const reviewWords = unitId 
-            ? allWords.slice(0, 20) // For specific units, just take first 20
+            ? allWords.filter(word => word.masteryLevel <= 4).slice(0, 20) // For specific units, filter mastered words and take first 20
             : await DatabaseService.getWordsForReview(20); // For general, use review logic
           setPracticeWords(reviewWords);
+          
+          // Calculate mastery distribution from ALL unit words (for summary display)
+          const wordsForSummary = unitId ? allWords : reviewWords;
+          const distribution = calculateMasteryDistribution(wordsForSummary);
+          setMasteryDistribution(distribution);
+          setTotalWordsInUnit(wordsForSummary.length);
+          
+          // Debug: Print mastery levels for each word
+          console.log('Practice words with mastery levels:');
+          reviewWords.forEach((word, index) => {
+            console.log(`${index + 1}. ${word.word} - Mastery Level: ${word.masteryLevel}`);
+          });
         }
       } catch (error) {
         console.error('Failed to load practice data:', error);
@@ -394,11 +518,14 @@ const PracticePage: React.FC = () => {
     try {
       // Use DatabaseService to get words for review directly (it handles null nextReview values correctly)
       const wordsToUse = unitId 
-        ? (await DatabaseService.getWordsByUnit(unitId)).slice(0, 15) // For specific units, just take first 15
+        ? (await DatabaseService.getWordsByUnit(unitId)).filter(word => word.masteryLevel <= 4).slice(0, 15) // For specific units, filter mastered words and take first 15
         : await DatabaseService.getWordsForReview(15); // For general practice, use review logic
       
       if (wordsToUse.length === 0) {
-        alert('没有需要复习的单词，请先学习一些单词！');
+        const alertMessage = unitId 
+          ? '你已掌握本单元全部单词，无需练习了！'
+          : '没有需要复习的单词，请先学习一些单词！';
+        alert(alertMessage);
         setIsLoading(false);
         return;
       }
@@ -413,11 +540,39 @@ const PracticePage: React.FC = () => {
     }
   };
 
-  const handlePracticeComplete = (results: any) => {
+  const handlePracticeComplete = async (results: unknown) => {
     console.log('Practice completed with results:', results);
     setShowPracticeSession(false);
     setSelectedMode(null);
-    // Could show a completion screen here
+    
+    // Refresh the mastery data after practice completion
+    try {
+      const allWords = unitId 
+        ? await DatabaseService.getWordsByUnit(unitId)
+        : await DatabaseService.getWordsForPractice();
+      
+      if (allWords.length > 0) {
+        // Update practice words for next session (filtered)
+        const reviewWords = unitId 
+          ? allWords.filter(word => word.masteryLevel <= 4).slice(0, 20)
+          : await DatabaseService.getWordsForReview(20);
+        setPracticeWords(reviewWords);
+        
+        // Update mastery distribution (from all words)
+        const wordsForSummary = unitId ? allWords : reviewWords;
+        const distribution = calculateMasteryDistribution(wordsForSummary);
+        setMasteryDistribution(distribution);
+        setTotalWordsInUnit(wordsForSummary.length);
+        
+        // Update recommendations
+        const recs = SpacedRepetitionService.getStudyRecommendations(allWords);
+        setRecommendations(recs);
+        
+        console.log('Mastery data refreshed after practice completion');
+      }
+    } catch (error) {
+      console.error('Failed to refresh mastery data:', error);
+    }
   };
 
   const handleExitPractice = () => {
@@ -452,6 +607,38 @@ const PracticePage: React.FC = () => {
         <Title>开始练习{unitId ? ` - 单元 ${unitId}` : ''}</Title>
         <Subtitle>选择适合你的练习方式，提升词汇掌握水平</Subtitle>
       </Header>
+
+      {/* Mastery Overview Section */}
+      {totalWordsInUnit > 0 && (
+        <MasterySection>
+          <MasteryTitle>当前练习词汇掌握程度</MasteryTitle>
+          <MasteryOverview>
+            <MasteryGroup>
+              <MasteryDot $level="new" $count={masteryDistribution.new}>
+                {masteryDistribution.new}
+              </MasteryDot>
+              <MasteryLabel>练习中</MasteryLabel>
+              <MasteryCount>{masteryDistribution.new}个单词</MasteryCount>
+            </MasteryGroup>
+            
+            <MasteryGroup>
+              <MasteryDot $level="learning" $count={masteryDistribution.learning}>
+                {masteryDistribution.learning}
+              </MasteryDot>
+              <MasteryLabel>巩固中</MasteryLabel>
+              <MasteryCount>{masteryDistribution.learning}个单词</MasteryCount>
+            </MasteryGroup>
+            
+            <MasteryGroup>
+              <MasteryDot $level="mastered" $count={masteryDistribution.mastered}>
+                {masteryDistribution.mastered}
+              </MasteryDot>
+              <MasteryLabel>已掌握</MasteryLabel>
+              <MasteryCount>{masteryDistribution.mastered}个单词</MasteryCount>
+            </MasteryGroup>
+          </MasteryOverview>
+        </MasterySection>
+      )}
 
       <ModeSelector>
         {PRACTICE_MODES.map((mode) => (

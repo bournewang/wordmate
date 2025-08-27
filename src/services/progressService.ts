@@ -1,15 +1,38 @@
 import { db } from './database';
-import type { Word, PracticeSession, UnitProgress } from '../types';
+import type { Word, PracticeSession } from '../types';
 
 export interface ProgressStats {
   overall: {
     totalWords: number;
-    masteredWords: number;
-    learningWords: number;
-    newWords: number;
+    
+    // Level-based progress (0-5)
+    newWords: number;           // Level 0: Never practiced
+    attemptedWords: number;     // Level 1: Some practice, low accuracy
+    learningWords: number;      // Level 2: Getting better (50%+ accuracy)
+    familiarWords: number;      // Level 3: Consistent correct answers
+    masteredWords: number;      // Level 4: Fast + accurate consistently  
+    expertWords: number;        // Level 5: Perfect recall
+    
+    // Traditional metrics
     masteryRate: number;
     averageMasteryLevel: number;
+    
+    // Progress metrics
+    wordsAttemptedToday: number;
+    wordsImprovedThisWeek: number;
+    currentAccuracy: number;
+    improvementTrend: 'improving' | 'stable' | 'declining';
   };
+  // Individual sessions for detailed view
+  sessions: {
+    id: string;
+    startTime: string;
+    practiceType: string;
+    wordsStudied: number;
+    accuracy: number;
+    averageResponseTime: number;
+    timeSpent: number;
+  }[];
   daily: {
     date: string;
     wordsStudied: number;
@@ -73,7 +96,6 @@ export class ProgressService {
         db.vocabularyData.toCollection().first()
       ]);
 
-      const unitProgressData = await db.unitProgress.where('userId').equals(userId).toArray();
 
       // Calculate overall stats
       const overall = this.calculateOverallStats(words);
@@ -87,7 +109,7 @@ export class ProgressService {
       const masteryDistribution = this.calculateMasteryDistribution(words);
       
       // Calculate unit progress
-      const unitProgress = this.calculateUnitProgress(words, units?.units || [], unitProgressData);
+      const unitProgress = this.calculateUnitProgress(words, units?.units || []);
       
       // Find weak words
       const weakWords = this.calculateWeakWords(words, sessions);
@@ -97,9 +119,13 @@ export class ProgressService {
       
       // Calculate practice type statistics
       const practiceTypeStats = this.calculatePracticeTypeStats(sessions);
+      
+      // Calculate individual session progress
+      const sessionProgress = this.calculateSessionProgress(sessions);
 
       return {
         overall,
+        sessions: sessionProgress,
         daily,
         weekly,
         monthly,
@@ -117,31 +143,65 @@ export class ProgressService {
 
   private static calculateOverallStats(words: Word[]) {
     const totalWords = words.length;
-    const masteredWords = words.filter(w => w.masteryLevel >= 4).length;
-    const learningWords = words.filter(w => w.masteryLevel > 0 && w.masteryLevel < 4).length;
-    const newWords = words.filter(w => w.masteryLevel === 0).length;
     
-    const masteryRate = totalWords > 0 ? (masteredWords / totalWords) * 100 : 0;
-    const averageMasteryLevel = totalWords > 0 
-      ? words.reduce((sum, w) => sum + w.masteryLevel, 0) / totalWords 
+    // Level-based categorization (0-5) - 使用更低的阈值便于测试
+    const newWords = words.filter(w => w.masteryLevel < 0.5).length;           // Level 0
+    const attemptedWords = words.filter(w => w.masteryLevel >= 0.5 && w.masteryLevel < 1.0).length;  // Level 1
+    const learningWords = words.filter(w => w.masteryLevel >= 1.0 && w.masteryLevel < 1.5).length;   // Level 2  
+    const familiarWords = words.filter(w => w.masteryLevel >= 1.5 && w.masteryLevel < 2.0).length;   // Level 3
+    const masteredWords = words.filter(w => w.masteryLevel >= 2.0 && w.masteryLevel < 3.0).length;   // Level 4
+    const expertWords = words.filter(w => w.masteryLevel >= 3.0).length;       // Level 5
+    
+    // Use proportional mastery rate: sum of all mastery levels / (4 * total words) * 100
+    const totalMasterySum = words.reduce((sum, w) => sum + w.masteryLevel, 0);
+    const masteryRate = totalWords > 0 
+      ? Math.min(100, Math.max(0, (totalMasterySum / (4 * totalWords)) * 100))
       : 0;
+    const averageMasteryLevel = totalWords > 0 ? totalMasterySum / totalWords : 0;
+
+    // Calculate today's activity (words with lastReviewed today)
+    const today = new Date().toISOString().split('T')[0];
+    const wordsAttemptedToday = words.filter(w => 
+      w.lastReviewed && w.lastReviewed.startsWith(today)
+    ).length;
+
+    // Calculate improvement trend (simplified - in real app, compare with last week)
+    const practiceWords = words.filter(w => w.repetitionCount > 0);
+    const avgAccuracy = practiceWords.length > 0 
+      ? (practiceWords.filter(w => w.masteryLevel >= 2).length / practiceWords.length) * 100
+      : 0;
+    
+    const improvementTrend: 'improving' | 'stable' | 'declining' = 
+      avgAccuracy >= 70 ? 'improving' : 
+      avgAccuracy >= 50 ? 'stable' : 'declining';
+
+    // Words improved this week (simplified - words that gained mastery level)
+    const wordsImprovedThisWeek = words.filter(w => 
+      w.lastReviewed && w.masteryLevel > 0
+    ).length;
 
     return {
       totalWords,
-      masteredWords,
-      learningWords,
       newWords,
+      attemptedWords,
+      learningWords,
+      familiarWords,
+      masteredWords,
+      expertWords,
       masteryRate,
-      averageMasteryLevel
+      averageMasteryLevel,
+      wordsAttemptedToday,
+      wordsImprovedThisWeek,
+      currentAccuracy: avgAccuracy,
+      improvementTrend
     };
   }
 
   private static calculateDailyProgress(sessions: PracticeSession[]) {
     const dailyData = new Map<string, {
       wordsStudied: Set<string>;
-      totalAnswers: number;
-      correctAnswers: number;
       sessionCount: number;
+      totalAccuracy: number;
       timeSpent: number;
     }>();
 
@@ -151,27 +211,16 @@ export class ProgressService {
       if (!dailyData.has(date)) {
         dailyData.set(date, {
           wordsStudied: new Set(),
-          totalAnswers: 0,
-          correctAnswers: 0,
           sessionCount: 0,
+          totalAccuracy: 0,
           timeSpent: 0
         });
       }
 
       const dayData = dailyData.get(date)!;
       session.words.forEach(wordId => dayData.wordsStudied.add(wordId));
-      
-      // Calculate accuracy from individual answers for more precision
-      if (session.answers && session.answers.length > 0) {
-        dayData.totalAnswers += session.answers.length;
-        dayData.correctAnswers += session.answers.filter(answer => answer.isCorrect).length;
-      } else {
-        // Fallback to session-level data if answers are not available
-        dayData.totalAnswers += session.totalWords;
-        dayData.correctAnswers += session.correctWords;
-      }
-      
       dayData.sessionCount += 1;
+      dayData.totalAccuracy += session.accuracy * 100; // Convert to percentage
       
       if (session.endTime) {
         const duration = new Date(session.endTime).getTime() - new Date(session.startTime).getTime();
@@ -183,7 +232,7 @@ export class ProgressService {
       .map(([date, data]) => ({
         date,
         wordsStudied: data.wordsStudied.size,
-        accuracy: data.totalAnswers > 0 ? (data.correctAnswers / data.totalAnswers) * 100 : 0,
+        accuracy: data.sessionCount > 0 ? Math.round(data.totalAccuracy / data.sessionCount) : 0,
         timeSpent: Math.round(data.timeSpent),
         sessionsCompleted: data.sessionCount
       }))
@@ -194,9 +243,8 @@ export class ProgressService {
   private static calculateWeeklyProgress(sessions: PracticeSession[]) {
     const weeklyData = new Map<string, {
       wordsLearned: Set<string>;
-      totalAnswers: number;
-      correctAnswers: number;
       sessionCount: number;
+      totalAccuracy: number;
       timeSpent: number;
     }>();
 
@@ -209,27 +257,16 @@ export class ProgressService {
       if (!weeklyData.has(weekKey)) {
         weeklyData.set(weekKey, {
           wordsLearned: new Set(),
-          totalAnswers: 0,
-          correctAnswers: 0,
           sessionCount: 0,
+          totalAccuracy: 0,
           timeSpent: 0
         });
       }
 
       const weekData = weeklyData.get(weekKey)!;
       session.words.forEach(wordId => weekData.wordsLearned.add(wordId));
-      
-      // Calculate accuracy from individual answers for more precision
-      if (session.answers && session.answers.length > 0) {
-        weekData.totalAnswers += session.answers.length;
-        weekData.correctAnswers += session.answers.filter(answer => answer.isCorrect).length;
-      } else {
-        // Fallback to session-level data if answers are not available
-        weekData.totalAnswers += session.totalWords;
-        weekData.correctAnswers += session.correctWords;
-      }
-      
       weekData.sessionCount += 1;
+      weekData.totalAccuracy += session.accuracy * 100; // Convert to percentage
       
       if (session.endTime) {
         const duration = new Date(session.endTime).getTime() - new Date(session.startTime).getTime();
@@ -241,7 +278,7 @@ export class ProgressService {
       .map(([week, data]) => ({
         week,
         wordsLearned: data.wordsLearned.size,
-        accuracy: data.totalAnswers > 0 ? (data.correctAnswers / data.totalAnswers) * 100 : 0,
+        accuracy: data.sessionCount > 0 ? Math.round(data.totalAccuracy / data.sessionCount) : 0,
         timeSpent: Math.round(data.timeSpent),
         sessionsCompleted: data.sessionCount
       }))
@@ -252,9 +289,8 @@ export class ProgressService {
   private static calculateMonthlyProgress(sessions: PracticeSession[]) {
     const monthlyData = new Map<string, {
       wordsLearned: Set<string>;
-      totalAnswers: number;
-      correctAnswers: number;
       sessionCount: number;
+      totalAccuracy: number;
       timeSpent: number;
     }>();
 
@@ -265,27 +301,16 @@ export class ProgressService {
       if (!monthlyData.has(monthKey)) {
         monthlyData.set(monthKey, {
           wordsLearned: new Set(),
-          totalAnswers: 0,
-          correctAnswers: 0,
           sessionCount: 0,
+          totalAccuracy: 0,
           timeSpent: 0
         });
       }
 
       const monthData = monthlyData.get(monthKey)!;
       session.words.forEach(wordId => monthData.wordsLearned.add(wordId));
-      
-      // Calculate accuracy from individual answers for more precision
-      if (session.answers && session.answers.length > 0) {
-        monthData.totalAnswers += session.answers.length;
-        monthData.correctAnswers += session.answers.filter(answer => answer.isCorrect).length;
-      } else {
-        // Fallback to session-level data if answers are not available
-        monthData.totalAnswers += session.totalWords;
-        monthData.correctAnswers += session.correctWords;
-      }
-      
       monthData.sessionCount += 1;
+      monthData.totalAccuracy += session.accuracy * 100; // Convert to percentage
       
       if (session.endTime) {
         const duration = new Date(session.endTime).getTime() - new Date(session.startTime).getTime();
@@ -297,7 +322,7 @@ export class ProgressService {
       .map(([month, data]) => ({
         month,
         wordsLearned: data.wordsLearned.size,
-        accuracy: data.totalAnswers > 0 ? (data.correctAnswers / data.totalAnswers) * 100 : 0,
+        accuracy: data.sessionCount > 0 ? Math.round(data.totalAccuracy / data.sessionCount) : 0,
         timeSpent: Math.round(data.timeSpent),
         sessionsCompleted: data.sessionCount
       }))
@@ -321,22 +346,39 @@ export class ProgressService {
     return distribution;
   }
 
-  private static calculateUnitProgress(words: Word[], units: any[], unitProgressData: UnitProgress[]) {
+  private static calculateUnitProgress(words: Word[], units: { id: number; name: string }[]) {
     return units.map(unit => {
       const unitWords = words.filter(w => w.unit === unit.id);
-      const masteredWords = unitWords.filter(w => w.masteryLevel >= 4).length;
       const totalWords = unitWords.length;
-      const completionRate = totalWords > 0 ? (masteredWords / totalWords) * 100 : 0;
-      const averageMasteryLevel = totalWords > 0 
-        ? unitWords.reduce((sum, w) => sum + w.masteryLevel, 0) / totalWords 
-        : 0;
+      
+      if (totalWords === 0) {
+        return {
+          unitId: unit.id,
+          unitName: unit.name,
+          totalWords: 0,
+          masteredWords: 0,
+          completionRate: 0,
+          averageMasteryLevel: 0
+        };
+      }
+      
+      // Calculate average mastery level
+      const totalMasterySum = unitWords.reduce((sum, w) => sum + w.masteryLevel, 0);
+      const averageMasteryLevel = totalMasterySum / totalWords;
+      
+      // Progress = sum of masteryLevel of all words / (4 * wordsCount) * 100
+      // This gives a proportional progress based on actual mastery levels
+      const completionRate = (totalMasterySum / (4 * totalWords)) * 100;
+      
+      // Count words that have reached significant mastery (>= 2.0) for display
+      const masteredWords = unitWords.filter(w => w.masteryLevel >= 2.0).length;
 
       return {
         unitId: unit.id,
         unitName: unit.name,
         totalWords,
         masteredWords,
-        completionRate,
+        completionRate: Math.min(100, Math.max(0, completionRate)), // Clamp between 0-100
         averageMasteryLevel
       };
     });
@@ -362,16 +404,19 @@ export class ProgressService {
 
     // Calculate stats from sessions
     sessions.forEach(session => {
-      session.answers.forEach(answer => {
-        const stats = wordStats.get(answer.wordId);
-        if (stats) {
-          stats.attempts++;
-          if (answer.isCorrect) {
-            stats.correct++;
+      // Check if session has answers array
+      if (session.answers && session.answers.length > 0) {
+        session.answers.forEach(answer => {
+          const stats = wordStats.get(answer.wordId);
+          if (stats) {
+            stats.attempts++;
+            if (answer.isCorrect) {
+              stats.correct++;
+            }
+            stats.lastPracticed = answer.timestamp.toString();
           }
-          stats.lastPracticed = answer.timestamp.toString();
-        }
-      });
+        });
+      }
     });
 
     return Array.from(wordStats.values())
@@ -423,7 +468,7 @@ export class ProgressService {
     if (hasRecentPractice) {
       // Calculate current streak backwards from today/yesterday
       const startDate = practiceArray.includes(today) ? today : yesterday;
-      let checkDate = new Date(startDate);
+      const checkDate = new Date(startDate);
       
       while (true) {
         const dateStr = checkDate.toISOString().split('T')[0];
@@ -523,5 +568,43 @@ export class ProgressService {
       averageTime: stats.totalSessions > 0 ? stats.totalTime / stats.totalSessions : 0,
       totalWords: stats.totalWords
     }));
+  }
+  
+  private static calculateSessionProgress(sessions: PracticeSession[]) {
+    // Sort sessions by start time (most recent first)
+    const sortedSessions = [...sessions].sort(
+      (a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
+    );
+    
+    // Take the most recent 50 sessions (or all if less than 50)
+    const recentSessions = sortedSessions.slice(0, 50);
+    
+    return recentSessions.map(session => {
+      // Calculate time spent in decimal minutes
+      let timeSpentMinutes = 0;
+      if (session.endTime) {
+        const duration = new Date(session.endTime).getTime() - new Date(session.startTime).getTime();
+        timeSpentMinutes = duration / 1000 / 60; // Convert to minutes
+      }
+      
+      // Calculate average response time if answers are available
+      let averageResponseTime = 0;
+      if (session.answers && session.answers.length > 0) {
+        const totalResponseTime = session.answers.reduce(
+          (sum, answer) => sum + (answer.responseTime || 0), 0
+        );
+        averageResponseTime = totalResponseTime / session.answers.length;
+      }
+      
+      return {
+        id: session.id,
+        startTime: session.startTime,
+        practiceType: session.practiceType,
+        wordsStudied: session.totalWords,
+        accuracy: Math.round(session.accuracy * 100), // Convert to percentage and round to integer
+        averageResponseTime,
+        timeSpent: Math.round(timeSpentMinutes * 10) / 10 // Round to 1 decimal place
+      };
+    });
   }
 }

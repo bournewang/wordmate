@@ -203,6 +203,7 @@ export function usePracticeSession(initialWords: Word[], practiceType: PracticeT
     if (sessionState.isComplete && sessionState.endTime) {
       const practiceSessionData: PracticeSession = {
         id: `session_${Date.now()}`,
+        userId: 'default-user', // Add userId for chart data
         practiceType,
         words: sessionState.words.map(w => w.id),
         answers: sessionState.answers,
@@ -218,7 +219,7 @@ export function usePracticeSession(initialWords: Word[], practiceType: PracticeT
         console.error('Failed to save practice session:', error);
       });
     }
-  }, [sessionState.isComplete, sessionState.endTime, practiceType, sessionState.words, sessionState.answers, sessionState.sessionStats]);
+  }, [sessionState.isComplete, sessionState.endTime, sessionState.startTime, practiceType, sessionState.words, sessionState.answers, sessionState.sessionStats]);
 
   return {
     sessionState,

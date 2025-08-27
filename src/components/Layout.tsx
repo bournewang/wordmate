@@ -8,9 +8,13 @@ import {
   Settings, 
   Volume2,
   Menu,
-  X
+  X,
+  User,
+  LogOut,
+  ChevronDown
 } from 'lucide-react';
 import { useState } from 'react';
+import { useAuth } from '../hooks/useAuth';
 
 const LayoutContainer = styled.div`
   min-height: 100vh;
@@ -194,6 +198,129 @@ const MobileMenuButton = styled.button`
   }
 `;
 
+const UserSection = styled.div`
+  display: flex;
+  align-items: center;
+  gap: ${({ theme }) => theme.spacing.md};
+`;
+
+const UserProfile = styled.div`
+  position: relative;
+  display: flex;
+  align-items: center;
+`;
+
+const UserButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: ${({ theme }) => theme.spacing.sm};
+  padding: ${({ theme }) => theme.spacing.sm} ${({ theme }) => theme.spacing.md};
+  background: ${({ theme }) => theme.colors.backgroundSecondary};
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.borderRadius.md};
+  color: ${({ theme }) => theme.colors.textPrimary};
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+  font-weight: ${({ theme }) => theme.fontWeights.medium};
+  cursor: pointer;
+  transition: all ${({ theme }) => theme.transitions.fast};
+  
+  &:hover {
+    background: ${({ theme }) => theme.colors.gray100};
+    border-color: ${({ theme }) => theme.colors.primary};
+  }
+  
+  @media (max-width: ${({ theme }) => theme.breakpoints.sm}) {
+    padding: ${({ theme }) => theme.spacing.xs} ${({ theme }) => theme.spacing.sm};
+    font-size: ${({ theme }) => theme.fontSizes.xs};
+  }
+`;
+
+const UserInfo = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  
+  @media (max-width: ${({ theme }) => theme.breakpoints.sm}) {
+    display: none;
+  }
+`;
+
+const UserName = styled.span`
+  font-weight: ${({ theme }) => theme.fontWeights.medium};
+  color: ${({ theme }) => theme.colors.textPrimary};
+  line-height: 1.2;
+`;
+
+const UserGrade = styled.span`
+  font-size: ${({ theme }) => theme.fontSizes.xs};
+  color: ${({ theme }) => theme.colors.textSecondary};
+  line-height: 1.2;
+`;
+
+const UserDropdown = styled.div<{ $isOpen: boolean }>`
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: ${({ theme }) => theme.spacing.xs};
+  background: ${({ theme }) => theme.colors.white};
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.borderRadius.md};
+  box-shadow: ${({ theme }) => theme.shadows.lg};
+  min-width: 200px;
+  z-index: 100;
+  display: ${({ $isOpen }) => $isOpen ? 'block' : 'none'};
+  
+  @media (max-width: ${({ theme }) => theme.breakpoints.sm}) {
+    right: -${({ theme }) => theme.spacing.md};
+    min-width: 180px;
+  }
+`;
+
+const DropdownItem = styled.button`
+  display: flex;
+  align-items: center;
+  gap: ${({ theme }) => theme.spacing.sm};
+  width: 100%;
+  padding: ${({ theme }) => theme.spacing.md};
+  background: transparent;
+  border: none;
+  color: ${({ theme }) => theme.colors.textPrimary};
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+  text-align: left;
+  cursor: pointer;
+  transition: background ${({ theme }) => theme.transitions.fast};
+  
+  &:first-child {
+    border-radius: ${({ theme }) => theme.borderRadius.md} ${({ theme }) => theme.borderRadius.md} 0 0;
+  }
+  
+  &:last-child {
+    border-radius: 0 0 ${({ theme }) => theme.borderRadius.md} ${({ theme }) => theme.borderRadius.md};
+  }
+  
+  &:only-child {
+    border-radius: ${({ theme }) => theme.borderRadius.md};
+  }
+  
+  &:hover {
+    background: ${({ theme }) => theme.colors.gray50};
+  }
+  
+  &.logout {
+    color: ${({ theme }) => theme.colors.error};
+    border-top: 1px solid ${({ theme }) => theme.colors.border};
+    
+    &:hover {
+      background: rgba(255, 107, 107, 0.1);
+    }
+  }
+  
+  svg {
+    width: 16px;
+    height: 16px;
+  }
+`;
+
 interface LayoutProps {
   children: ReactNode;
 }
@@ -201,6 +328,8 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const { user, logout, isAuthenticated } = useAuth();
 
   const navigation = [
     { name: '首页', href: '/', icon: Home },
@@ -210,6 +339,35 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   ];
 
   const closeSidebar = () => setSidebarOpen(false);
+  
+  const handleLogout = async () => {
+    setUserDropdownOpen(false);
+    await logout();
+  };
+  
+  const getGradeDisplayName = (grade: string) => {
+    const gradeMap: Record<string, string> = {
+      'grade3': '三年级',
+      'grade4': '四年级',
+      'grade5': '五年级',
+      'grade6': '六年级',
+      'junior': '初中',
+      'senior': '高中'
+    };
+    return gradeMap[grade] || '六年级';
+  };
+  
+  // Close dropdown when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = () => {
+      if (userDropdownOpen) {
+        setUserDropdownOpen(false);
+      }
+    };
+    
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [userDropdownOpen]);
 
   return (
     <LayoutContainer>
@@ -220,12 +378,52 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             <h1>词汇练习</h1>
           </Logo>
           
-          <MobileMenuButton
-            onClick={() => setSidebarOpen(true)}
-            aria-label="打开菜单"
-          >
-            <Menu size={20} />
-          </MobileMenuButton>
+          <UserSection>
+            {isAuthenticated && user && (
+              <UserProfile>
+                <UserButton
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setUserDropdownOpen(!userDropdownOpen);
+                  }}
+                  aria-label="用户菜单"
+                >
+                  <User size={18} />
+                  <UserInfo>
+                    <UserName>{user.email || user.username}</UserName>
+                    <UserGrade>{getGradeDisplayName(user.grade)}</UserGrade>
+                  </UserInfo>
+                  <ChevronDown size={16} />
+                </UserButton>
+                
+                <UserDropdown $isOpen={userDropdownOpen}>
+                  <DropdownItem
+                    onClick={() => {
+                      setUserDropdownOpen(false);
+                      // Could navigate to profile page in the future
+                    }}
+                  >
+                    <User size={16} />
+                    查看资料
+                  </DropdownItem>
+                  <DropdownItem
+                    className="logout"
+                    onClick={handleLogout}
+                  >
+                    <LogOut size={16} />
+                    退出登录
+                  </DropdownItem>
+                </UserDropdown>
+              </UserProfile>
+            )}
+            
+            <MobileMenuButton
+              onClick={() => setSidebarOpen(true)}
+              aria-label="打开菜单"
+            >
+              <Menu size={20} />
+            </MobileMenuButton>
+          </UserSection>
         </HeaderContent>
       </Header>
 

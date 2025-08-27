@@ -241,33 +241,6 @@ const OptionIcon = styled.div`
   background: rgba(255, 255, 255, 0.2);
 `;
 
-const NextButton = styled(motion.button)`
-  padding: 1rem 2rem;
-  background: ${props => props.theme.colors.primary};
-  color: white;
-  border: none;
-  border-radius: 12px;
-  font-size: 1.1rem;
-  font-weight: 600;
-  cursor: pointer;
-  min-width: 150px;
-  
-  &:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  }
-  
-  &:active {
-    transform: translateY(0);
-  }
-  
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
-  }
-`;
 
 const FeedbackMessage = styled(motion.div)<{ $isCorrect: boolean }>`
   text-align: center;
@@ -357,7 +330,7 @@ export const MultipleChoiceMode: React.FC<MultipleChoiceModeProps> = ({
     
     // Small delay to ensure the component is ready
     setTimeout(playAudio, 300);
-  }, [word.id, onPlayAudio]);
+  }, [word, onPlayAudio]);
 
   const handlePlayAudio = async () => {
     if (isAudioPlaying) return;
@@ -380,7 +353,6 @@ export const MultipleChoiceMode: React.FC<MultipleChoiceModeProps> = ({
     setHasAnswered(true);
     setShowFeedback(true);
     
-    const isCorrect = option === word.definition;
     onAnswer(option); // Pass the actual user selection
   };
 

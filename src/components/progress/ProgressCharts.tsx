@@ -88,7 +88,7 @@ const FilterButton = styled(Button)<{ $active?: boolean }>`
 
   @media (max-width: ${({ theme }) => theme.breakpoints.sm}) {
     padding: ${({ theme }) => theme.spacing.xs} ${({ theme }) => theme.spacing.sm};
-    font-size: ${({ theme }) => theme.fontSizes.xs};
+    font-size: ${({ theme }) => theme.fontSizes.sm};
   }
 `;
 
@@ -121,7 +121,7 @@ const CustomTooltip = styled.div`
   border: 1px solid ${({ theme }) => theme.colors.border};
   border-radius: ${({ theme }) => theme.borderRadius.md};
   padding: ${({ theme }) => theme.spacing.md};
-  box-shadow: ${({ theme }) => theme.shadows.md};
+  box-shadow: ${({ theme }) => theme.shadows.lg};
   font-size: ${({ theme }) => theme.fontSizes.sm};
 `;
 
@@ -134,19 +134,12 @@ const MASTERY_COLORS = [
   '#059669', // Level 5 - Green
 ];
 
-const PRACTICE_TYPE_COLORS = [
-  '#3b82f6', // Blue
-  '#8b5cf6', // Purple
-  '#f59e0b', // Orange
-  '#10b981', // Green
-  '#ef4444', // Red
-];
 
 interface ProgressChartsProps {
   stats: ProgressStats;
 }
 
-type TimeFilter = 'daily' | 'weekly' | 'monthly';
+type TimeFilter = 'daily' | 'weekly' | 'monthly' | 'sessions';
 
 const ProgressCharts: React.FC<ProgressChartsProps> = ({ stats }) => {
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('daily');
@@ -185,13 +178,25 @@ const ProgressCharts: React.FC<ProgressChartsProps> = ({ stats }) => {
 
   const progressData = getProgressData();
 
-  const masteryData = stats.masteryDistribution.map((item, index) => ({
-    name: `级别 ${item.level}`,
+  const getMasteryLevelName = (level: number) => {
+    switch (level) {
+      case 0: return '新词汇';
+      case 1: return '初步接触';
+      case 2: return '正在学习';
+      case 3: return '比较熟悉';
+      case 4: return '基本掌握';
+      case 5: return '完全掌握';
+      default: return `级别 ${level}`;
+    }
+  };
+
+  const masteryData = stats.masteryDistribution.map((item) => ({
+    name: getMasteryLevelName(item.level),
     value: item.count,
     percentage: item.percentage
   }));
 
-  const practiceTypeData = stats.practiceTypeStats.map((item, index) => ({
+  const practiceTypeData = stats.practiceTypeStats.map((item) => ({
     name: item.type === 'flashcard' ? '卡片练习' :
           item.type === 'typing' ? '拼写练习' :
           item.type === 'multipleChoice' ? '选择题' : item.type,
@@ -200,14 +205,14 @@ const ProgressCharts: React.FC<ProgressChartsProps> = ({ stats }) => {
     avgTime: item.averageTime
   }));
 
-  const CustomProgressTooltip = ({ active, payload, label }: any) => {
+  const CustomProgressTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ color: string; dataKey: string; value: unknown }>; label?: string }) => {
     if (active && payload && payload.length) {
       return (
         <CustomTooltip>
           <p><strong>{label}</strong></p>
-          {payload.map((entry: any, index: number) => (
+          {payload.map((entry, index: number) => (
             <p key={index} style={{ color: entry.color }}>
-              {entry.dataKey}: {entry.value}
+              {entry.dataKey}: {String(entry.value)}
               {entry.dataKey === '准确率' && '%'}
               {entry.dataKey === '学习时间' && '分钟'}
             </p>
@@ -342,6 +347,100 @@ const ProgressCharts: React.FC<ProgressChartsProps> = ({ stats }) => {
         </ChartContainer>
       </ChartCard>
 
+      {/* Individual Sessions Chart */}
+      <ChartCard>
+        <ChartHeader>
+          <h3>个人练习记录 (最近50次)</h3>
+        </ChartHeader>
+        
+        <ChartContainer>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart 
+              data={stats.sessions.map((session, index) => ({
+                session: `#${stats.sessions.length - index}`,
+                准确率: session.accuracy,
+                学习时间: session.timeSpent,
+                学习词汇: session.wordsStudied,
+                练习类型: session.practiceType === 'flashcard' ? '卡片练习' :
+                         session.practiceType === 'typing' ? '拼写练习' :
+                         session.practiceType === 'multipleChoice' ? '选择题' : session.practiceType,
+                时间: new Date(session.startTime).toLocaleDateString('zh-CN', { 
+                  month: '2-digit', 
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })
+              })).reverse()}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis 
+                dataKey="session" 
+                stroke="#6b7280"
+                fontSize={12}
+                tick={{ fontSize: 12 }}
+                interval={0}
+                angle={-45}
+                textAnchor="end"
+                height={80}
+              />
+              <YAxis 
+                yAxisId="left"
+                stroke="#6b7280"
+                fontSize={12}
+                tick={{ fontSize: 12 }}
+                domain={[0, 100]}
+                label={{ value: '准确率 (%)', angle: -90, position: 'insideLeft' }}
+              />
+              <YAxis 
+                yAxisId="right" 
+                orientation="right"
+                stroke="#6b7280"
+                fontSize={12}
+                tick={{ fontSize: 12 }}
+                label={{ value: '学习时间 (分钟)', angle: 90, position: 'insideRight' }}
+              />
+              <Tooltip 
+                content={({ active, payload, label }: { active?: boolean; payload?: Array<{ payload?: Record<string, unknown> }>; label?: string | number }) => {
+                  if (active && payload && payload.length) {
+                    const data = payload[0]?.payload;
+                    return (
+                      <CustomTooltip>
+                        <p><strong>{label}</strong></p>
+                        <p>时间: {data?.时间 as string}</p>
+                        <p>练习类型: {data?.练习类型 as string}</p>
+                        <p style={{ color: '#f59e0b' }}>准确率: {data?.准确率 as number}%</p>
+                        <p style={{ color: '#8b5cf6' }}>学习时间: {data?.学习时间 as number}分钟</p>
+                        <p style={{ color: '#10b981' }}>学习词汇: {data?.学习词汇 as number}个</p>
+                      </CustomTooltip>
+                    );
+                  }
+                  return null;
+                }}
+              />
+              <Legend wrapperStyle={{ fontSize: '14px' }} />
+              <Line 
+                yAxisId="left"
+                type="monotone" 
+                dataKey="准确率" 
+                stroke="#f59e0b" 
+                strokeWidth={3}
+                dot={{ fill: '#f59e0b', strokeWidth: 2, r: 5 }}
+                activeDot={{ r: 7, stroke: '#f59e0b', strokeWidth: 2 }}
+              />
+              <Line 
+                yAxisId="right"
+                type="monotone" 
+                dataKey="学习时间" 
+                stroke="#8b5cf6" 
+                strokeWidth={2}
+                dot={{ fill: '#8b5cf6', strokeWidth: 2, r: 4 }}
+                activeDot={{ r: 6, stroke: '#8b5cf6', strokeWidth: 2 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </ChartContainer>
+      </ChartCard>
+
       {/* Mastery Distribution and Practice Types */}
       <DoublePieContainer>
         <ChartCard>
@@ -363,7 +462,7 @@ const ProgressCharts: React.FC<ProgressChartsProps> = ({ stats }) => {
                   label={({ name, percentage }) => `${name}: ${percentage.toFixed(1)}%`}
                   fontSize={12}
                 >
-                  {masteryData.map((entry, index) => (
+                  {masteryData.map((_, index) => (
                     <Cell key={`cell-${index}`} fill={MASTERY_COLORS[index]} />
                   ))}
                 </Pie>
@@ -394,8 +493,8 @@ const ProgressCharts: React.FC<ProgressChartsProps> = ({ stats }) => {
                   tick={{ fontSize: 12 }}
                 />
                 <Tooltip 
-                  formatter={(value: any, name: string) => [
-                    value,
+                  formatter={(value: unknown, name: string) => [
+                    String(value),
                     name === 'sessions' ? '练习次数' :
                     name === 'accuracy' ? '平均准确率' : name
                   ]}

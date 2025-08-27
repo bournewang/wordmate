@@ -38,6 +38,7 @@ export const theme = {
     backgroundDark: '#1f2937',
     
     // 文本色
+    text: '#111827',
     textPrimary: '#111827',
     textSecondary: '#6b7280',
     textMuted: '#9ca3af',

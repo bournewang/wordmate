@@ -17,7 +17,7 @@ export class AudioService {
   static async playWordAudio(word: Word, fallbackToTTS: boolean = true): Promise<boolean> {
     try {
       // 首先尝试播放本地音频文件
-      const audioPlayed = await this.playLocalAudio(word.audioUrl);
+      const audioPlayed = word.audioUrl ? await this.playLocalAudio(word.audioUrl) : false;
       
       if (audioPlayed) {
         return true;

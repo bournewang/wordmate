@@ -11,3 +11,6 @@ export type {
   StudySettings,
   User
 } from './vocabulary';
+
+// Re-export types from progressService
+export type { ProgressStats } from '../services/progressService';

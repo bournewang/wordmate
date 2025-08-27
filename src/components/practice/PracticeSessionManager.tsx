@@ -3,14 +3,9 @@ import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ArrowLeft, 
-  Settings, 
-  Play, 
-  Pause, 
   RotateCcw, 
   CheckCircle,
-  Trophy,
-  Target,
-  Clock
+  Trophy
 } from 'lucide-react';
 import type { Word, PracticeType } from '../../types';
 import { usePracticeSession } from '../../hooks/usePracticeSession';
@@ -382,7 +377,7 @@ interface PracticeSessionManagerProps {
   words: Word[];
   initialPracticeType: PracticeType;
   onExit: () => void;
-  onComplete?: (results: any) => void;
+  onComplete?: (results: unknown) => void;
 }
 
 const PRACTICE_MODES = [
@@ -404,7 +399,6 @@ export const PracticeSessionManager: React.FC<PracticeSessionManagerProps> = ({
     sessionState,
     submitAnswer,
     nextWord,
-    skipWord,
     resetSession,
     progress
   } = usePracticeSession(words, currentPracticeType);
@@ -432,7 +426,7 @@ export const PracticeSessionManager: React.FC<PracticeSessionManagerProps> = ({
       answerString = userAnswer;
     }
     
-    const answer = await submitAnswer(answerString);
+    await submitAnswer(answerString);
     
     // Auto-advance to next word after a short delay
     setTimeout(() => {

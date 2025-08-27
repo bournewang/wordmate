@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Volume2, RotateCcw, Check, X } from 'lucide-react';
+import { Volume2, Check, X } from 'lucide-react';
 import type { Word } from '../../types';
 import { AudioService } from '../../services/audioService';
 
@@ -317,7 +317,7 @@ export const FlashcardMode: React.FC<FlashcardModeProps> = ({
     
     // Small delay to ensure the component is ready
     setTimeout(playAudio, 300);
-  }, [word.id, onPlayAudio]);
+  }, [word, onPlayAudio]);
 
   const handleCardClick = () => {
     if (!hasAnswered) {
@@ -344,10 +344,6 @@ export const FlashcardMode: React.FC<FlashcardModeProps> = ({
     onAnswer(isCorrect);
   };
 
-  const handleReset = () => {
-    setIsFlipped(false);
-    setHasAnswered(false);
-  };
 
   return (
     <FlashcardContainer>
