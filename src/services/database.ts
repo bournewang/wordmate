@@ -8,6 +8,11 @@ import type {
   UnitProgress,
   StudySettings
 } from '../types';
+import type {
+  UserSubscription,
+  PaymentRecord,
+  UsageStats
+} from '../types/subscription';
 
 export class WordMateDB extends Dexie {
   // 词汇数据表
@@ -20,6 +25,11 @@ export class WordMateDB extends Dexie {
   unitProgress!: Dexie.Table<UnitProgress, string>;
   practiceSessions!: Dexie.Table<PracticeSession, string>;
   studySettings!: Dexie.Table<StudySettings, string>;
+  
+  // 订阅相关表
+  subscriptions!: Dexie.Table<UserSubscription, string>;
+  payments!: Dexie.Table<PaymentRecord, string>;
+  usageStats!: Dexie.Table<UsageStats & { id: string }, string>;
 
   constructor() {
     super('WordMateDB');
@@ -33,6 +43,20 @@ export class WordMateDB extends Dexie {
       practiceSessions: 'id, userId, unitId, practiceType, startTime, completed',
       studySettings: 'userId, practiceTypes, adaptiveDifficulty'
     });
+    
+    // Version 2: Add subscription tables
+    this.version(2).stores({
+      vocabularyData: '++id, grade, metadata.version',
+      words: 'id, word, unit, difficulty, masteryLevel, lastReviewed, nextReview',
+      users: 'id, username, email, grade',
+      userProgress: 'userId, lastActiveDate, currentStreak',
+      unitProgress: 'userId, unitId, lastStudied, completionRate',
+      practiceSessions: 'id, userId, unitId, practiceType, startTime, completed',
+      studySettings: 'userId, practiceTypes, adaptiveDifficulty',
+      subscriptions: 'id, userId, planId, status, currentPeriodStart, currentPeriodEnd',
+      payments: 'id, userId, subscriptionId, status, paymentMethod, createdAt',
+      usageStats: 'id, userId, lastResetDate'
+    });
 
     // 添加钩子来自动处理日期字符串
     this.words.hook('creating', (_primaryKey, obj) => {
@@ -42,6 +66,24 @@ export class WordMateDB extends Dexie {
 
     this.practiceSessions.hook('creating', (_primaryKey, obj) => {
       obj.startTime = obj.startTime || new Date().toISOString();
+    });
+    
+    // Subscription hooks
+    this.subscriptions.hook('creating', (_primaryKey, obj) => {
+      const now = new Date().toISOString();
+      if (!obj.createdAt) obj.createdAt = now;
+      if (!obj.updatedAt) obj.updatedAt = now;
+      if (!obj.id) obj.id = `sub_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    });
+    
+    this.subscriptions.hook('updating', (_modifications, _primaryKey, obj) => {
+      obj.updatedAt = new Date().toISOString();
+    });
+    
+    this.payments.hook('creating', (_primaryKey, obj) => {
+      const now = new Date().toISOString();
+      if (!obj.createdAt) obj.createdAt = now;
+      if (!obj.id) obj.id = `pay_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     });
   }
 }
@@ -343,6 +385,187 @@ export class DatabaseService {
     } catch (error) {
       console.error('清除数据失败:', error);
       throw error;
+    }
+  }
+
+  // Subscription Management Methods
+  static async saveSubscription(subscription: UserSubscription): Promise<void> {
+    try {
+      await db.subscriptions.put(subscription);
+      console.log('订阅数据已保存:', subscription.id);
+    } catch (error) {
+      console.error('保存订阅数据失败:', error);
+      throw error;
+    }
+  }
+
+  static async getUserSubscription(userId: string): Promise<UserSubscription | null> {
+    try {
+      return await db.subscriptions.where('userId').equals(userId).first() || null;
+    } catch (error) {
+      console.error('获取用户订阅失败:', error);
+      return null;
+    }
+  }
+
+  static async updateSubscription(subscriptionId: string, updates: Partial<UserSubscription>): Promise<void> {
+    try {
+      await db.subscriptions.update(subscriptionId, {
+        ...updates,
+        updatedAt: new Date().toISOString()
+      });
+      console.log('订阅已更新:', subscriptionId);
+    } catch (error) {
+      console.error('更新订阅失败:', error);
+      throw error;
+    }
+  }
+
+  static async cancelSubscription(subscriptionId: string): Promise<void> {
+    try {
+      await db.subscriptions.update(subscriptionId, {
+        status: 'cancelled',
+        cancelledAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+      console.log('订阅已取消:', subscriptionId);
+    } catch (error) {
+      console.error('取消订阅失败:', error);
+      throw error;
+    }
+  }
+
+  static async savePaymentRecord(payment: PaymentRecord): Promise<void> {
+    try {
+      await db.payments.put(payment);
+      console.log('支付记录已保存:', payment.id);
+    } catch (error) {
+      console.error('保存支付记录失败:', error);
+      throw error;
+    }
+  }
+
+  static async getUserPayments(userId: string, limit: number = 10): Promise<PaymentRecord[]> {
+    try {
+      return await db.payments
+        .where('userId')
+        .equals(userId)
+        .reverse()
+        .limit(limit)
+        .toArray();
+    } catch (error) {
+      console.error('获取支付记录失败:', error);
+      return [];
+    }
+  }
+
+  static async updatePaymentStatus(paymentId: string, status: PaymentRecord['status'], transactionId?: string): Promise<void> {
+    try {
+      const updates: Partial<PaymentRecord> = { status };
+      if (transactionId) {
+        updates.transactionId = transactionId;
+      }
+      if (status === 'completed') {
+        updates.completedAt = new Date().toISOString();
+      }
+      
+      await db.payments.update(paymentId, updates);
+      console.log('支付状态已更新:', paymentId, status);
+    } catch (error) {
+      console.error('更新支付状态失败:', error);
+      throw error;
+    }
+  }
+
+  static async saveUsageStats(userId: string, stats: UsageStats): Promise<void> {
+    try {
+      const usageRecord = {
+        id: userId,
+        userId,
+        ...stats
+      };
+      await db.usageStats.put(usageRecord);
+    } catch (error) {
+      console.error('保存使用统计失败:', error);
+      throw error;
+    }
+  }
+
+  static async getUserUsageStats(userId: string): Promise<UsageStats | null> {
+    try {
+      const record = await db.usageStats.get(userId);
+      if (!record) return null;
+      
+      const { id, ...stats } = record;
+      // Note: userId property removed from UsageStats interface
+      return stats;
+    } catch (error) {
+      console.error('获取使用统计失败:', error);
+      return null;
+    }
+  }
+
+  static async getExpiredTrials(): Promise<UserSubscription[]> {
+    try {
+      const now = new Date().toISOString();
+      return await db.subscriptions
+        .where('status')
+        .equals('trial')
+        .and(sub => sub.currentPeriodEnd <= now)
+        .toArray();
+    } catch (error) {
+      console.error('获取过期试用失败:', error);
+      return [];
+    }
+  }
+
+  static async getActiveSubscriptions(): Promise<UserSubscription[]> {
+    try {
+      return await db.subscriptions
+        .where('status')
+        .equals('active')
+        .toArray();
+    } catch (error) {
+      console.error('获取活跃订阅失败:', error);
+      return [];
+    }
+  }
+
+  static async getSubscriptionsByStatus(status: UserSubscription['status']): Promise<UserSubscription[]> {
+    try {
+      return await db.subscriptions
+        .where('status')
+        .equals(status)
+        .toArray();
+    } catch (error) {
+      console.error('获取订阅失败:', error);
+      return [];
+    }
+  }
+
+  // Cleanup expired data
+  static async cleanupExpiredData(): Promise<void> {
+    try {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const cutoffDate = thirtyDaysAgo.toISOString();
+
+      // Clean up old practice sessions
+      await db.practiceSessions
+        .where('startTime')
+        .below(cutoffDate)
+        .delete();
+
+      // Clean up old payment records (keep completed ones)
+      await db.payments
+        .where('createdAt')
+        .below(cutoffDate)
+        .and(payment => payment.status === 'failed')
+        .delete();
+
+      console.log('过期数据清理完成');
+    } catch (error) {
+      console.error('清理过期数据失败:', error);
     }
   }
 }

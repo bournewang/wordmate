@@ -38,13 +38,13 @@ export async function onRequestPost(context) {
     console.log(`📝 Registration attempt for device: ${deviceId}`);
 
     // Check if user already exists by device ID
-    const existingUserId = await env.WORDMATE_KV.get(`device:${deviceId}`);
+    const existingUserId = await WORDMATE.get(`device:${deviceId}`);
     if (existingUserId) {
       return createErrorResponse(409, 'USER_EXISTS', 'User already registered on this device', corsHeaders);
     }
 
     // Check if email is already taken
-    const existingEmailUser = await env.WORDMATE_KV.get(`email:${email}`);
+    const existingEmailUser = await WORDMATE.get(`email:${email}`);
     if (existingEmailUser) {
       return createErrorResponse(409, 'EMAIL_TAKEN', 'Email address already registered', corsHeaders);
     }
@@ -72,11 +72,11 @@ export async function onRequestPost(context) {
     };
 
     // Save user data
-    await env.WORDMATE_KV.put(`user:${userId}`, JSON.stringify(user));
+    await WORDMATE.put(`user:${userId}`, JSON.stringify(user));
     
     // Create mappings
-    await env.WORDMATE_KV.put(`device:${deviceId}`, userId);
-    await env.WORDMATE_KV.put(`email:${email}`, userId);
+    await WORDMATE.put(`device:${deviceId}`, userId);
+    await WORDMATE.put(`email:${email}`, userId);
 
     // Initialize progress with preferences
     const initialProgress = {
@@ -93,7 +93,7 @@ export async function onRequestPost(context) {
       updatedAt: new Date().toISOString()
     };
     
-    await env.WORDMATE_KV.put(`progress:${userId}`, JSON.stringify(initialProgress));
+    await WORDMATE.put(`progress:${userId}`, JSON.stringify(initialProgress));
 
     // Generate JWT token
     const token = await generateJWT({

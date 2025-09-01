@@ -32,7 +32,7 @@ export async function onRequestGet(context) {
     console.log(`👤 Get user info for: ${userId}`);
 
     // Get user data from KV
-    const user = await env.WORDMATE_KV.get(`user:${userId}`, 'json');
+    const user = await WORDMATE.get(`user:${userId}`, 'json');
     
     if (!user) {
       return createErrorResponse(404, 'USER_NOT_FOUND', 'User not found', corsHeaders);
@@ -100,7 +100,7 @@ export async function onRequestPut(context) {
     }
 
     // Get existing user data
-    const existingUser = await env.WORDMATE_KV.get(`user:${userId}`, 'json');
+    const existingUser = await WORDMATE.get(`user:${userId}`, 'json');
     if (!existingUser) {
       return createErrorResponse(404, 'USER_NOT_FOUND', 'User not found', corsHeaders);
     }
@@ -117,7 +117,7 @@ export async function onRequestPut(context) {
       
       // Check if email is already taken (if not empty)
       if (email) {
-        const existingEmailUser = await env.WORDMATE_KV.get(`email:${email}`);
+        const existingEmailUser = await WORDMATE.get(`email:${email}`);
         if (existingEmailUser && existingEmailUser !== userId) {
           return createErrorResponse(400, 'EMAIL_TAKEN', 'Email already in use', corsHeaders);
         }
@@ -125,10 +125,10 @@ export async function onRequestPut(context) {
 
       // Update email mappings
       if (existingUser.email) {
-        await env.WORDMATE_KV.delete(`email:${existingUser.email}`);
+        await WORDMATE.delete(`email:${existingUser.email}`);
       }
       if (email) {
-        await env.WORDMATE_KV.put(`email:${email}`, userId);
+        await WORDMATE.put(`email:${email}`, userId);
       }
 
       updatedUser.email = email;
@@ -178,7 +178,7 @@ export async function onRequestPut(context) {
 
     // Update timestamp and save
     updatedUser.updatedAt = new Date().toISOString();
-    await env.WORDMATE_KV.put(`user:${userId}`, JSON.stringify(updatedUser));
+    await WORDMATE.put(`user:${userId}`, JSON.stringify(updatedUser));
 
     console.log(`✅ User ${userId} updated successfully`);
 
@@ -275,7 +275,7 @@ function parseJWT(token) {
  */
 async function checkRateLimit(userId, action, env) {
   const key = `rate_limit:${userId}:${action}`;
-  const current = await env.WORDMATE_KV.get(key);
+  const current = await WORDMATE.get(key);
   
   const limits = {
     user_update: { max: 5, window: 60 * 60 }, // 5 updates per hour
@@ -289,7 +289,7 @@ async function checkRateLimit(userId, action, env) {
     return false;
   }
   
-  await env.WORDMATE_KV.put(key, (count + 1).toString(), { expirationTtl: limit.window });
+  await WORDMATE.put(key, (count + 1).toString(), { expirationTtl: limit.window });
   return true;
 }
 

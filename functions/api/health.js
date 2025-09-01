@@ -23,12 +23,12 @@ export async function onRequestGet(context) {
     try {
       // Try to perform a simple KV operation
       const testKey = `health_check:${Date.now()}`;
-      await env.WORDMATE_KV.put(testKey, 'ok', { expirationTtl: 10 });
-      const testValue = await env.WORDMATE_KV.get(testKey);
+      await WORDMATE.put(testKey, 'ok', { expirationTtl: 10 });
+      const testValue = await WORDMATE.get(testKey);
       kvStatus = testValue === 'ok' ? 'connected' : 'error';
       
       // Clean up test key
-      await env.WORDMATE_KV.delete(testKey);
+      await WORDMATE.delete(testKey);
     } catch (error) {
       console.error('KV health check failed:', error);
       kvStatus = 'error';

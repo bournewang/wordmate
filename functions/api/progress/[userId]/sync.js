@@ -268,7 +268,7 @@ function resolveWordConflict(localWord, serverWord) {
 async function getServerProgress(userId, env) {
   try {
     const progressKey = `progress:${userId}`;
-    const progressData = await env.WORDMATE_KV.get(progressKey, 'json');
+    const progressData = await WORDMATE.get(progressKey, 'json');
     return progressData;
   } catch (error) {
     console.error('Failed to get server progress:', error);
@@ -282,7 +282,7 @@ async function getServerProgress(userId, env) {
 async function saveServerProgress(userId, progress, env) {
   try {
     const progressKey = `progress:${userId}`;
-    await env.WORDMATE_KV.put(progressKey, JSON.stringify(progress));
+    await WORDMATE.put(progressKey, JSON.stringify(progress));
   } catch (error) {
     console.error('Failed to save server progress:', error);
     throw new Error('Failed to save progress data');
@@ -361,7 +361,7 @@ function parseJWT(token) {
  */
 async function checkRateLimit(userId, action, env) {
   const key = `rate_limit:${userId}:${action}`;
-  const current = await env.WORDMATE_KV.get(key);
+  const current = await WORDMATE.get(key);
   
   const limits = {
     sync: { max: 30, window: 60 * 60 }, // 30 syncs per hour
@@ -375,7 +375,7 @@ async function checkRateLimit(userId, action, env) {
     return false;
   }
   
-  await env.WORDMATE_KV.put(key, (count + 1).toString(), { expirationTtl: limit.window });
+  await WORDMATE.put(key, (count + 1).toString(), { expirationTtl: limit.window });
   return true;
 }
 

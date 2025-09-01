@@ -9,10 +9,12 @@ import UnitsPage from './pages/UnitsPage';
 import PracticePage from './pages/PracticePage';
 import ProgressPage from './pages/ProgressPage';
 import SettingsPage from './pages/SettingsPage';
+import { PaymentSuccess } from './components/subscription/PaymentSuccess';
 
 // 认证和同步组件
 import { AuthProvider, useAuth, useRequireAuth } from './hooks/useAuth';
 import { SyncProvider } from './hooks/useSync';
+import { SubscriptionProvider } from './hooks/useSubscription';
 import { LoginPage } from './components/auth/LoginPage';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
 import { initializeSync } from './utils/simpleSync';
@@ -127,6 +129,7 @@ function MainApp() {
           <Route path="/practice/:unitId" element={<PracticePage />} />
           <Route path="/progress" element={<ProgressPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/payment/success" element={<PaymentSuccess />} />
         </Routes>
       </Layout>
     </Router>
@@ -184,9 +187,11 @@ function App() {
       <ThemeProvider theme={theme}>
         <GlobalStyle />
         <AuthProvider>
-          <SyncProvider>
-            <AuthGate />
-          </SyncProvider>
+          <SubscriptionProvider>
+            <SyncProvider>
+              <AuthGate />
+            </SyncProvider>
+          </SubscriptionProvider>
         </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>

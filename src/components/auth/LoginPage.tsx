@@ -22,8 +22,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, isLoading = false
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [deviceInfo, setDeviceInfo] = useState<string>('');
+  const [isRegistering, setIsRegistering] = useState(false);
 
-  const { login } = useAuth();
+  const { login, register } = useAuth();
 
   useEffect(() => {
     // Load saved email if exists
@@ -59,17 +60,21 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, isLoading = false
     setErrorMessage('');
     
     try {
-      const result = await login({
+      // For quick start, we'll generate a temporary email and register the user
+      const tempEmail = `temp_${Date.now()}@wordmate.local`;
+      const result = await register({
         username: formData.username || '单词达人',
+        email: tempEmail,
         grade: formData.grade as any
+        // No password for trial users
       });
 
       if (result.success) {
         setAuthState('success');
-        setSuccessMessage(result.isNewUser ? '欢迎使用 WordMate！' : '欢迎回来！');
+        setSuccessMessage('欢迎使用 WordMate！');
         setTimeout(() => onLogin(result.user), 1000);
       } else {
-        throw new Error(result.error?.message || '登录失败');
+        throw new Error(result.error?.message || '注册失败');
       }
     } catch (error: any) {
       setAuthState('error');
@@ -78,7 +83,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, isLoading = false
     }
   };
 
-  const handleEmailLogin = async (e: React.FormEvent) => {
+  const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     if (authState === 'loading') return;
 
@@ -96,26 +101,43 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, isLoading = false
     setErrorMessage('');
 
     try {
-      const result = await login({
-        email: formData.email.trim(),
-        username: formData.username.trim() || '单词达人',
-        grade: formData.grade as any
-      });
+      let result;
+      
+      if (isRegistering) {
+        // Registration flow
+        result = await register({
+          email: formData.email.trim(),
+          username: formData.username.trim() || '单词达人',
+          grade: formData.grade as any
+          // No password for passwordless registration
+        });
+      } else {
+        // Login flow  
+        result = await login({
+          email: formData.email.trim()
+          // No password for passwordless login
+        });
+      }
 
       if (result.success) {
         setAuthState('success');
         
-        if (result.isNewUser) {
+        if (isRegistering) {
           setSuccessMessage('账户创建成功！欢迎使用 WordMate！');
-        } else if (result.isNewDevice) {
-          setSuccessMessage('新设备已关联！您的学习记录已同步');
         } else {
           setSuccessMessage('登录成功！欢迎回来！');
         }
 
         setTimeout(() => onLogin(result.user), 1500);
       } else {
-        throw new Error(result.error?.message || '登录失败');
+        // If login failed, might be a new user - suggest registration
+        if (!isRegistering && result.error?.code === 'LOGIN_ERROR') {
+          setErrorMessage('用户不存在，是否要创建新账户？');
+          setIsRegistering(true);
+          setAuthState('idle');
+          return;
+        }
+        throw new Error(result.error?.message || (isRegistering ? '注册失败' : '登录失败'));
       }
     } catch (error: any) {
       setAuthState('error');
@@ -126,6 +148,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, isLoading = false
 
   const toggleEmailMode = () => {
     setShowEmailInput(!showEmailInput);
+    setErrorMessage('');
+    setAuthState('idle');
+    setIsRegistering(false); // Reset to login mode
+  };
+  
+  const toggleRegisterMode = () => {
+    setIsRegistering(!isRegistering);
     setErrorMessage('');
     setAuthState('idle');
   };
@@ -242,12 +271,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, isLoading = false
                 exit={{ opacity: 0, x: -20 }}
                 transition={{ duration: 0.3 }}
               >
-                <h2>邮箱注册/登录</h2>
+                <h2>{isRegistering ? '邮箱注册' : '邮箱登录'}</h2>
                 <p className="mode-description">
-                  使用邮箱注册账户，支持多设备数据同步
+                  {isRegistering 
+                    ? '创建新账户，支持多设备数据同步'
+                    : '登录已有账户，同步您的学习数据'
+                  }
                 </p>
 
-                <form onSubmit={handleEmailLogin}>
+                <form onSubmit={handleEmailAuth}>
                   <div className="form-group">
                     <label htmlFor="email">邮箱地址 *</label>
                     <input
@@ -301,11 +333,20 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, isLoading = false
                     {authState === 'loading' ? (
                       <>
                         <LoadingSpinner size="small" />
-                        <span>处理中...</span>
+                        <span>{isRegistering ? '注册中...' : '登录中...'}</span>
                       </>
                     ) : (
-                      '注册/登录'
+                      isRegistering ? '创建账户' : '登录账户'
                     )}
+                  </button>
+                  
+                  <button 
+                    type="button"
+                    className="text-button"
+                    onClick={toggleRegisterMode}
+                    disabled={authState === 'loading'}
+                  >
+                    {isRegistering ? '已有账户？点击登录' : '没有账户？点击注册'}
                   </button>
                 </form>
 

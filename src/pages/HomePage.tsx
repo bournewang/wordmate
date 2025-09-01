@@ -13,6 +13,8 @@ import {
 import { Card, Button, Container } from '../styles/theme';
 import { DatabaseService } from '../services/database';
 import { ProgressService } from '../services/progressService';
+import { SubscriptionStatus, TrialManager } from '../components/subscription';
+import { useSubscriptionStatus } from '../hooks/useSubscription';
 import type { VocabularyData, ProgressStats } from '../types';
 
 const Hero = styled.section`
@@ -155,6 +157,8 @@ const HomePage: React.FC = () => {
   const [vocabularyData, setVocabularyData] = useState<VocabularyData | null>(null);
   const [stats, setStats] = useState<ProgressStats | null>(null);
   const [loading, setLoading] = useState(true);
+  // const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const { isPremium, isTrialActive, needsUpgrade } = useSubscriptionStatus();
 
   useEffect(() => {
     loadData();
@@ -196,6 +200,19 @@ const HomePage: React.FC = () => {
           开始学习
         </Button>
       </Hero>
+
+      {/* Trial Management and Subscription Status */}
+      {/* Only show TrialManager for non-premium users who haven't started trial yet */}
+      {!isPremium && (
+        <TrialManager autoStartTrial={!isTrialActive && !needsUpgrade} />
+      )}
+      
+      {/* Show subscription status for premium users, active trial users, or expired trial users */}
+      {(isPremium || isTrialActive || needsUpgrade) && (
+        <SubscriptionStatus 
+          showUpgradeButton={!isPremium}
+        />
+      )}
 
       <StatsGrid>
         <StatCard>

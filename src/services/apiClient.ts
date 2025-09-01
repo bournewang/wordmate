@@ -4,14 +4,29 @@
  */
 
 import type {
-  AuthRequest,
+  UserLogin,
   AuthResponse,
+  UserCreate,
   ProgressSyncRequest,
   ProgressSyncResponse,
-  ServerUser,
-  ServerUserProgress,
+  UserResponse,
+  WordProgressResponse,
+  SessionStart,
+  SessionComplete,
+  SessionResponse,
+  PaymentCreate,
+  PaymentResponse as BackendPaymentResponse,
+  HealthCheckResponse,
   APIResponse,
-} from '../types/serverTypes';
+  FrontendUser,
+} from '../types/backendTypes';
+import { BackendTypeConverter } from '../types/backendTypes';
+import type {
+  UserSubscription,
+  PaymentRecord,
+  UsageStats
+} from '../types/subscription';
+import { PaymentService, PaymentRequest, PaymentResponse } from './paymentService';
 
 export interface APIClientConfig {
   baseURL: string;
@@ -39,7 +54,7 @@ export class APIClient {
     const baseURL = config.baseURL || 
                    import.meta.env.VITE_API_BASE_URL || 
                    process.env.VITE_API_BASE_URL || 
-                   'https://your-domain.edgeone.app/api';
+                   'http://localhost:8000';
 
     this.config = {
       baseURL,
@@ -69,46 +84,131 @@ export class APIClient {
 
   // Authentication Methods
 
-  async login(authData: AuthRequest): Promise<APIResponse<AuthResponse>> {
+  async login(email?: string, username?: string, password?: string, deviceId?: string): Promise<APIResponse<{ user: FrontendUser; token: string; expires_in: number }>> {
     try {
-      console.log('🔑 Making real API login request to:', this.config.baseURL + '/auth/login');
+      console.log('🔑 Making login request to:', this.config.baseURL + '/api/v1/auth/login');
       
-      const response = await this.makeRequest<AuthResponse>('/auth/login', {
+      const loginData: UserLogin = {
+        email,
+        username,
+        password,
+        device_id: deviceId || this.currentDeviceId
+      };
+      
+      // Remove undefined fields to avoid backend validation issues
+      Object.keys(loginData).forEach(key => {
+        if (loginData[key as keyof UserLogin] === undefined) {
+          delete loginData[key as keyof UserLogin];
+        }
+      });
+      
+      const response = await this.makeRequest<{ user: UserResponse; token: string; expires_in: number }>('/api/v1/auth/login', {
         method: 'POST',
-        body: authData,
+        body: loginData,
         requiresAuth: false
       });
 
       if (response.success && response.data.token) {
         this.authToken = response.data.token;
-        this.deviceId = authData.deviceId;
-        this.saveAuth(response.data.token, authData.deviceId);
+        this.deviceId = this.currentDeviceId || this.generateDeviceId();
+        this.saveAuth(response.data.token, this.deviceId);
+        
+        // Convert backend user response to frontend user format
+        const frontendUser = BackendTypeConverter.userResponseToFrontendUser(
+          response.data.user,
+          this.deviceId
+        );
+        
+        return {
+          success: true,
+          data: {
+            user: frontendUser,
+            token: response.data.token,
+            expires_in: response.data.expires_in
+          },
+          timestamp: new Date().toISOString()
+        };
       }
 
-      return response;
+      return response as APIResponse<{ user: FrontendUser; token: string; expires_in: number }>;
     } catch (error: any) {
       return this.createErrorResponse('LOGIN_FAILED', error.message);
     }
   }
 
 
-  async refreshToken(): Promise<APIResponse<{ token: string; expiresAt: string }>> {
-    if (!this.authToken || !this.deviceId) {
-      return this.createErrorResponse('NO_AUTH_DATA', 'No authentication data available');
-    }
-
+  async register(
+    username: string,
+    email: string,
+    password?: string,
+    grade: string = 'grade6',
+    trialData?: any
+  ): Promise<APIResponse<{ user: FrontendUser; token: string; expires_in: number }>> {
     try {
-      const response = await this.makeRequest<{ token: string; expiresAt: string }>('/auth/refresh', {
+      console.log('🔑 Making registration request to:', this.config.baseURL + '/api/v1/auth/register');
+      
+      const deviceId = this.currentDeviceId || this.generateDeviceId();
+      
+      const registerData: UserCreate = {
+        username,
+        email,
+        password,
+        device_id: deviceId,
+        grade,
+        trial_data: trialData ? BackendTypeConverter.convertTrialDataForBackend(trialData) : undefined
+      };
+      
+      // Remove undefined fields to avoid backend validation issues
+      Object.keys(registerData).forEach(key => {
+        if (registerData[key as keyof UserCreate] === undefined) {
+          delete registerData[key as keyof UserCreate];
+        }
+      });
+      
+      const response = await this.makeRequest<{ user: UserResponse; token: string; expires_in: number }>('/api/v1/auth/register', {
         method: 'POST',
-        body: {
-          token: this.authToken,
-          deviceId: this.deviceId
-        },
+        body: registerData,
         requiresAuth: false
       });
 
       if (response.success && response.data.token) {
         this.authToken = response.data.token;
+        this.deviceId = deviceId;
+        this.saveAuth(response.data.token, deviceId);
+        
+        // Convert backend user response to frontend user format
+        const frontendUser = BackendTypeConverter.userResponseToFrontendUser(
+          response.data.user,
+          deviceId
+        );
+        
+        return {
+          success: true,
+          data: {
+            user: frontendUser,
+            token: response.data.token,
+            expires_in: response.data.expires_in
+          },
+          timestamp: new Date().toISOString()
+        };
+      }
+
+      return response as APIResponse<{ user: FrontendUser; token: string; expires_in: number }>;
+    } catch (error: any) {
+      return this.createErrorResponse('REGISTER_FAILED', error.message);
+    }
+  }
+
+  async refreshToken(): Promise<APIResponse<{ token: string; expires_in: number }>> {
+    try {
+      const response = await this.makeRequest<{ token: string; expires_in: number }>('/api/v1/auth/refresh', {
+        method: 'POST',
+        requiresAuth: true
+      });
+
+      if (response.success && response.data.token) {
+        this.authToken = response.data.token;
+        this.deviceId = this.deviceId || this.generateDeviceId();
         this.saveAuth(response.data.token, this.deviceId);
       }
 
@@ -120,15 +220,24 @@ export class APIClient {
 
   // Progress Management Methods
 
-  async getProgress(userId: string): Promise<APIResponse<ServerUserProgress>> {
-    return this.makeRequest<ServerUserProgress>(`/progress/${userId}`, {
+  async getWordProgress(wordId?: string): Promise<APIResponse<WordProgressResponse[]>> {
+    const endpoint = wordId ? `/api/v1/progress/words/${wordId}` : '/api/v1/progress/words';
+    return this.makeRequest<WordProgressResponse[]>(endpoint, {
       method: 'GET',
       requiresAuth: true
     });
   }
 
-  async syncProgress(userId: string, syncData: ProgressSyncRequest): Promise<APIResponse<ProgressSyncResponse>> {
-    return this.makeRequest<ProgressSyncResponse>(`/progress/${userId}/sync`, {
+  async updateWordProgress(wordId: string, updateData: { is_correct: boolean; response_time_ms: number; quality_score: number }): Promise<APIResponse<WordProgressResponse>> {
+    return this.makeRequest<WordProgressResponse>(`/api/v1/progress/words/${wordId}`, {
+      method: 'POST',
+      body: updateData,
+      requiresAuth: true
+    });
+  }
+
+  async syncProgress(syncData: ProgressSyncRequest): Promise<APIResponse<ProgressSyncResponse>> {
+    return this.makeRequest<ProgressSyncResponse>('/api/v1/progress/sync', {
       method: 'POST',
       body: syncData,
       requiresAuth: true
@@ -136,7 +245,7 @@ export class APIClient {
   }
 
   async createBackup(userId: string, backupData: {
-    fullProgress: ServerUserProgress;
+    fullProgress: any; // Legacy method, consider removing
     backupType: 'manual' | 'automatic';
   }): Promise<APIResponse<{ backupId: string; timestamp: string; size: number }>> {
     return this.makeRequest(`/progress/${userId}/backup`, {
@@ -148,19 +257,49 @@ export class APIClient {
 
   // User Management Methods
 
-  async getUser(userId: string): Promise<APIResponse<ServerUser>> {
-    return this.makeRequest<ServerUser>(`/user/${userId}`, {
+  async getCurrentUser(): Promise<APIResponse<FrontendUser>> {
+    const response = await this.makeRequest<UserResponse>('/api/v1/auth/me', {
       method: 'GET',
       requiresAuth: true
     });
+    
+    if (response.success) {
+      const frontendUser = BackendTypeConverter.userResponseToFrontendUser(
+        response.data,
+        this.deviceId || this.generateDeviceId()
+      );
+      
+      return {
+        success: true,
+        data: frontendUser,
+        timestamp: new Date().toISOString()
+      };
+    }
+    
+    return response as APIResponse<FrontendUser>;
   }
 
-  async updateUser(userId: string, updates: Partial<ServerUser>): Promise<APIResponse<ServerUser>> {
-    return this.makeRequest<ServerUser>(`/user/${userId}`, {
+  async updateUser(updates: { username?: string; email?: string; grade?: string }): Promise<APIResponse<FrontendUser>> {
+    const response = await this.makeRequest<UserResponse>('/api/v1/users/profile', {
       method: 'PUT',
       body: updates,
       requiresAuth: true
     });
+    
+    if (response.success) {
+      const frontendUser = BackendTypeConverter.userResponseToFrontendUser(
+        response.data,
+        this.deviceId || this.generateDeviceId()
+      );
+      
+      return {
+        success: true,
+        data: frontendUser,
+        timestamp: new Date().toISOString()
+      };
+    }
+    
+    return response as APIResponse<FrontendUser>;
   }
 
   // Device Management Methods
@@ -170,7 +309,7 @@ export class APIClient {
     existingToken: string;
     newDeviceId: string;
     linkCode?: string;
-  }): Promise<APIResponse<{ user: ServerUser; newToken: string; linkedDevices: string[] }>> {
+  }): Promise<APIResponse<{ user: any; newToken: string; linkedDevices: string[] }>> {
     return this.makeRequest('/devices/link', {
       method: 'POST',
       body: linkData,
@@ -178,18 +317,183 @@ export class APIClient {
     });
   }
 
+  // Session Management Methods
+
+  async startSession(practiceType: 'flashcard' | 'typing' | 'choice'): Promise<APIResponse<SessionResponse>> {
+    const sessionData: SessionStart = { practice_type: practiceType };
+    return this.makeRequest<SessionResponse>('/api/v1/sessions/start', {
+      method: 'POST',
+      body: sessionData,
+      requiresAuth: true
+    });
+  }
+
+  async completeSession(
+    sessionId: number,
+    wordsCount: number,
+    correctCount: number,
+    durationSeconds: number,
+    answers: Array<{ word_id: string; is_correct: boolean; response_time_ms: number; quality_score: number }>
+  ): Promise<APIResponse<SessionResponse>> {
+    const sessionData: SessionComplete = {
+      words_count: wordsCount,
+      correct_count: correctCount,
+      duration_seconds: durationSeconds,
+      answers
+    };
+    
+    return this.makeRequest<SessionResponse>(`/api/v1/sessions/${sessionId}/complete`, {
+      method: 'POST',
+      body: sessionData,
+      requiresAuth: true
+    });
+  }
+
+  async getSessionHistory(limit: number = 10): Promise<APIResponse<SessionResponse[]>> {
+    return this.makeRequest<SessionResponse[]>(`/api/v1/sessions?limit=${limit}`, {
+      method: 'GET',
+      requiresAuth: true
+    });
+  }
+
+  // Payment Methods
+
+  async createPayment(
+    amount: number,
+    method: 'alipay' | 'wechat',
+    planId?: string
+  ): Promise<APIResponse<BackendPaymentResponse>> {
+    const paymentData: PaymentCreate = {
+      amount,
+      method,
+      plan_id: planId
+    };
+    
+    return this.makeRequest<BackendPaymentResponse>('/api/v1/payments', {
+      method: 'POST',
+      body: paymentData,
+      requiresAuth: true
+    });
+  }
+
+  async getBackendPaymentHistory(limit: number = 10): Promise<APIResponse<BackendPaymentResponse[]>> {
+    return this.makeRequest<BackendPaymentResponse[]>(`/api/v1/payments?limit=${limit}`, {
+      method: 'GET',
+      requiresAuth: true
+    });
+  }
+
   // Health Check
 
-  async healthCheck(): Promise<APIResponse<{
-    status: string;
-    version: string;
-    timestamp: string;
-    kvStatus: string;
-    region: string;
-  }>> {
-    return this.makeRequest('/health', {
+  async healthCheck(): Promise<APIResponse<HealthCheckResponse>> {
+    return this.makeRequest<HealthCheckResponse>('/health', {
       method: 'GET',
       requiresAuth: false
+    });
+  }
+
+  // Subscription Management Methods
+
+  async getSubscription(userId: string): Promise<APIResponse<UserSubscription>> {
+    return this.makeRequest<UserSubscription>(`/subscription/${userId}`, {
+      method: 'GET',
+      requiresAuth: true
+    });
+  }
+
+  async createSubscription(subscriptionData: Omit<UserSubscription, 'id' | 'createdAt' | 'updatedAt'>): Promise<APIResponse<UserSubscription>> {
+    return this.makeRequest<UserSubscription>('/subscription', {
+      method: 'POST',
+      body: subscriptionData,
+      requiresAuth: true
+    });
+  }
+
+  async updateSubscription(subscriptionId: string, updates: Partial<UserSubscription>): Promise<APIResponse<UserSubscription>> {
+    return this.makeRequest<UserSubscription>(`/subscription/${subscriptionId}`, {
+      method: 'PUT',
+      body: updates,
+      requiresAuth: true
+    });
+  }
+
+  async cancelSubscription(subscriptionId: string, reason?: string): Promise<APIResponse<{ success: boolean; message: string }>> {
+    return this.makeRequest(`/subscription/${subscriptionId}/cancel`, {
+      method: 'POST',
+      body: { reason },
+      requiresAuth: true
+    });
+  }
+
+  async initiatePayment(paymentRequest: PaymentRequest): Promise<APIResponse<PaymentResponse>> {
+    // For now, use the local payment service
+    // In production, this would make an API call to your backend
+    // which then communicates with payment providers
+    try {
+      const result = await PaymentService.initiatePayment(paymentRequest);
+      return {
+        success: result.success as true,
+        data: result as any,
+        timestamp: new Date().toISOString()
+      };
+    } catch (error: any) {
+      return this.createErrorResponse('PAYMENT_INITIATION_FAILED', error.message);
+    }
+  }
+
+  async verifyPayment(paymentId: string, method: 'alipay' | 'wechat'): Promise<APIResponse<{
+    verified: boolean;
+    transactionId?: string;
+    amount?: number;
+    status: 'completed' | 'failed' | 'pending';
+  }>> {
+    return this.makeRequest('/payment/verify', {
+      method: 'POST',
+      body: { paymentId, method },
+      requiresAuth: true
+    });
+  }
+
+  async getPaymentHistory(userId: string, limit: number = 10): Promise<APIResponse<PaymentRecord[]>> {
+    return this.makeRequest<PaymentRecord[]>(`/payment/history/${userId}?limit=${limit}`, {
+      method: 'GET',
+      requiresAuth: true
+    });
+  }
+
+  async processRefund(paymentId: string, amount?: number, reason?: string): Promise<APIResponse<{
+    success: boolean;
+    refundId?: string;
+    message: string;
+  }>> {
+    return this.makeRequest('/payment/refund', {
+      method: 'POST',
+      body: { paymentId, amount, reason },
+      requiresAuth: true
+    });
+  }
+
+  // Usage Tracking Methods
+
+  async recordUsage(userId: string, action: 'practice' | 'word_learn', count: number = 1): Promise<APIResponse<{ success: boolean }>> {
+    return this.makeRequest('/usage/record', {
+      method: 'POST',
+      body: { userId, action, count, timestamp: new Date().toISOString() },
+      requiresAuth: true
+    });
+  }
+
+  async getUsageStats(userId: string): Promise<APIResponse<UsageStats>> {
+    return this.makeRequest<UsageStats>(`/usage/${userId}`, {
+      method: 'GET',
+      requiresAuth: true
+    });
+  }
+
+  async resetDailyUsage(userId: string): Promise<APIResponse<{ success: boolean }>> {
+    return this.makeRequest(`/usage/${userId}/reset-daily`, {
+      method: 'POST',
+      requiresAuth: true
     });
   }
 
@@ -313,6 +617,13 @@ export class APIClient {
       const stored = localStorage.getItem('wordmate_auth');
       if (stored) {
         const { token, deviceId } = JSON.parse(stored);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔧 APIClient: Loading stored auth', {
+            hasToken: !!token,
+            hasDeviceId: !!deviceId,
+            tokenLength: token?.length
+          });
+        }
         this.authToken = token;
         this.deviceId = deviceId;
       }
@@ -324,6 +635,9 @@ export class APIClient {
     if (!this.deviceId) {
       this.deviceId = this.generateDeviceId();
       localStorage.setItem('wordmate_device_id', this.deviceId);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔧 APIClient: Generated new device ID:', this.deviceId);
+      }
     }
   }
 
@@ -361,7 +675,22 @@ export class APIClient {
 
   // Set auth token method
   setAuthToken(token: string): void {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔧 APIClient: Setting auth token', {
+        tokenLength: token?.length,
+        tokenPreview: token?.substring(0, 20) + '...',
+        currentTokenExists: !!this.authToken
+      });
+    }
+    
     this.authToken = token;
+    
+    // Verify the token was set correctly
+    if (this.authToken !== token) {
+      console.error('❌ APIClient: Failed to set auth token - tokens do not match!');
+    } else if (process.env.NODE_ENV === 'development') {
+      console.log('✅ APIClient: Auth token set successfully');
+    }
   }
 
   // Public getters

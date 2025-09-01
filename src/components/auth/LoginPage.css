@@ -189,6 +189,31 @@
   cursor: not-allowed;
 }
 
+.text-button {
+  width: 100%;
+  padding: 0.5rem 1rem;
+  background: transparent;
+  border: none;
+  color: #a0aec0;
+  font-size: 0.875rem;
+  font-weight: 400;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: underline;
+  margin: 0.5rem 0;
+}
+
+.text-button:hover:not(:disabled) {
+  color: #667eea;
+  transform: translateY(-1px);
+}
+
+.text-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
 /* Divider */
 .divider {
   position: relative;
@@ -376,5 +401,13 @@
   .secondary-button:hover:not(:disabled) {
     background: #2d3748;
     border-color: #718096;
+  }
+  
+  .text-button {
+    color: #718096;
+  }
+  
+  .text-button:hover:not(:disabled) {
+    color: #667eea;
   }
 }

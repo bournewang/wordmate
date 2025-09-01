@@ -7,6 +7,8 @@ import type { Word, PracticeType } from '../types';
 import { DatabaseService } from '../services/database';
 import { SpacedRepetitionService } from '../services/spacedRepetition';
 import { PracticeSessionManager } from '../components/practice/PracticeSessionManager';
+import { UsageLimitGuard, usePracticeGuard } from '../components/subscription';
+// import { useSubscriptionStatus } from '../hooks/useSubscription'; // Removed unused import
 
 const PracticeContainer = styled.div`
   min-height: 100vh;
@@ -435,6 +437,10 @@ const PracticePage: React.FC = () => {
     mastered: number;
   }>({ new: 0, learning: 0, mastered: 0 });
   const [totalWordsInUnit, setTotalWordsInUnit] = useState(0);
+  
+  // Subscription and usage tracking
+  // const { isPremium } = useSubscriptionStatus(); // Keeping for potential future use
+  const { canPractice, recordPracticeSession } = usePracticeGuard();
 
   // Calculate mastery distribution from practice words
   const calculateMasteryDistribution = (words: Word[]) => {
@@ -512,6 +518,11 @@ const PracticePage: React.FC = () => {
   }, [unitId]);
 
   const handleModeSelect = async (mode: PracticeType) => {
+    // Check usage limits before starting practice
+    if (!canPractice()) {
+      return; // UsageLimitGuard will show the appropriate message
+    }
+    
     setSelectedMode(mode);
     setIsLoading(true);
     
@@ -542,6 +553,10 @@ const PracticePage: React.FC = () => {
 
   const handlePracticeComplete = async (results: unknown) => {
     console.log('Practice completed with results:', results);
+    
+    // Record practice session for usage tracking
+    await recordPracticeSession();
+    
     setShowPracticeSession(false);
     setSelectedMode(null);
     
@@ -640,44 +655,49 @@ const PracticePage: React.FC = () => {
         </MasterySection>
       )}
 
-      <ModeSelector>
-        {PRACTICE_MODES.map((mode) => (
-          <ModeCard
-            key={mode.type}
-            $featured={mode.featured}
-            onClick={() => handleModeSelect(mode.type)}
-            whileHover={{ y: -4 }}
-            whileTap={{ scale: 0.98 }}
-            animate={{
-              scale: selectedMode === mode.type ? 1.02 : 1,
-              boxShadow: selectedMode === mode.type 
-                ? '0 8px 32px rgba(0, 0, 0, 0.15)' 
-                : '0 0 0 rgba(0, 0, 0, 0)'
-            }}
-          >
-            <ModeIcon>{mode.icon}</ModeIcon>
-            <ModeTitle>{mode.title}</ModeTitle>
-            <ModeDescription>{mode.description}</ModeDescription>
-            
-            {recommendations && (
-              <ModeStats>
-                <StatItem>
-                  <StatValue>{recommendations.reviewWords}</StatValue>
-                  <StatLabel>待复习</StatLabel>
-                </StatItem>
-                <StatItem>
-                  <StatValue>{recommendations.newWords}</StatValue>
-                  <StatLabel>新单词</StatLabel>
-                </StatItem>
-                <StatItem>
-                  <StatValue>{recommendations.dailyGoal}</StatValue>
-                  <StatLabel>建议目标</StatLabel>
-                </StatItem>
-              </ModeStats>
-            )}
-          </ModeCard>
-        ))}
-      </ModeSelector>
+      <UsageLimitGuard 
+        action="practice" 
+        featureName="练习模式"
+      >
+        <ModeSelector>
+          {PRACTICE_MODES.map((mode) => (
+            <ModeCard
+              key={mode.type}
+              $featured={mode.featured}
+              onClick={() => handleModeSelect(mode.type)}
+              whileHover={{ y: -4 }}
+              whileTap={{ scale: 0.98 }}
+              animate={{
+                scale: selectedMode === mode.type ? 1.02 : 1,
+                boxShadow: selectedMode === mode.type 
+                  ? '0 8px 32px rgba(0, 0, 0, 0.15)' 
+                  : '0 0 0 rgba(0, 0, 0, 0)'
+              }}
+            >
+              <ModeIcon>{mode.icon}</ModeIcon>
+              <ModeTitle>{mode.title}</ModeTitle>
+              <ModeDescription>{mode.description}</ModeDescription>
+              
+              {recommendations && (
+                <ModeStats>
+                  <StatItem>
+                    <StatValue>{recommendations.reviewWords}</StatValue>
+                    <StatLabel>待复习</StatLabel>
+                  </StatItem>
+                  <StatItem>
+                    <StatValue>{recommendations.newWords}</StatValue>
+                    <StatLabel>新单词</StatLabel>
+                  </StatItem>
+                  <StatItem>
+                    <StatValue>{recommendations.dailyGoal}</StatValue>
+                    <StatLabel>建议目标</StatLabel>
+                  </StatItem>
+                </ModeStats>
+              )}
+            </ModeCard>
+          ))}
+        </ModeSelector>
+      </UsageLimitGuard>
 
       {isLoading && (
         <QuickStartSection>
